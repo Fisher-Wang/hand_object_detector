@@ -40,10 +40,9 @@ six==1.16.0
 stack-data==0.6.3
 tensorboardX==2.6.2.2
 tomli==2.0.2
-torch==1.12.1+cu113
-torchvision==0.13.1+cu113
 tqdm==4.66.5
 traitlets==5.14.3
 typing_extensions==4.12.2
+tyro
 urllib3==2.2.3
 wcwidth==0.2.13

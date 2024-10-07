@@ -17,43 +17,12 @@ More information can be found at our:
 
 
 ## Prerequisites
-[New] Now, it is compatible with newer pytorch version. Thanks [ajonnavittula](https://github.com/ajonnavittula) and [relh](https://github.com/relh) for helping figure out the compile files.
-Create a conda env called handobj_new, install pytorch-1.12.1, cuda-11.3:
-* python=3.8
-* cudatoolkit=11.3
-* pytorch=1.12.1
+Create a conda env
 ```
-conda create --name handobj_new python=3.8
-conda activate handobj_new
-conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
-```
-
-
-
-[Old, deprecated] Create a conda env called handobj, install pytorch-1.0.1, cuda-10.0:
-* Python 3.6
-* Pytorch 1.0
-* CUDA 10.0
-```
-conda create --name handobj python=3.6
+conda create --name handobj python=3.10
 conda activate handobj
-conda install pytorch=1.0.1 torchvision cudatoolkit=10.0 -c pytorch
-```
-
-
-## Preparation
-
-First of all, clone the code
-```
-git clone https://github.com/ddshan/hand_object_detector && cd hand_object_detector
-```
-
-
-## Environment & Compilation
-
-Install all the python dependencies using pip:
-```
 pip install -r requirements.txt
+pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
 ```
 
 Compile the cuda dependencies using following simple commands:
@@ -61,23 +30,6 @@ Compile the cuda dependencies using following simple commands:
 cd lib
 python setup.py build develop
 ```
-
-<!-- You will meet some errors about coco dataset: (not the best but the easiest solution)
-```
-cd data
-git clone https://github.com/pdollar/coco.git 
-cd coco/PythonAPI
-make
-``` -->
-<!-- 
-If you meet some error about spicy, make sure you downgrade to scipy=1.1.0:
-```
-pip install scipy=1.1.0
-``` -->
-
-PS:
-
-Since the repo is modified based on [faster-rcnn.pytorch](https://github.com/jwyang/faster-rcnn.pytorch/tree/pytorch-1.0) (use branch pytorch-1.0), if you have futher questions about the environments, the issues in that repo may help.
 
 ## Performance (AP)
 <!-- Table, test on all -->
@@ -310,9 +262,6 @@ Label definitions:
 - Issues with left/right in egocentric data (Please check egocentric models that work far better).
 - Difficulty parsing the full state with lots of people.
 
-<!-- ## Acknowledgment
-
-xxx -->
 
 ## Citation
 
