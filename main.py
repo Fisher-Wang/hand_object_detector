@@ -1,9 +1,4 @@
-from __future__ import absolute_import, division, print_function
-
-import argparse
 import os
-import pdb
-import sys
 import time
 from dataclasses import dataclass
 from typing import List, Optional
@@ -12,27 +7,17 @@ import cv2
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import torchvision.datasets as dset
-import torchvision.transforms as transforms
 import tyro
 from model.faster_rcnn.resnet import resnet
-from model.faster_rcnn.vgg16 import vgg16
 from model.roi_layers import nms
 from model.rpn.bbox_transform import bbox_transform_inv, clip_boxes
 from model.utils.blob import im_list_to_blob
-from model.utils.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
+from model.utils.config import cfg, cfg_from_file, cfg_from_list
 from model.utils.net_utils import (  # (1) here add a function to viz
     vis_detections_filtered_objects,
     vis_detections_filtered_objects_PIL,
 )
-from model.utils.viz_hand_obj import draw_hand_mask, draw_line_point, draw_obj_mask
-from PIL import Image, ImageDraw, ImageFont
-from roi_data_layer.roibatchLoader import roibatchLoader
-from roi_data_layer.roidb import combined_roidb
 from torch import Tensor
-from torch.autograd import Variable
 
 pascal_classes = np.asarray(["__background__", "targetobject", "hand"])
 
