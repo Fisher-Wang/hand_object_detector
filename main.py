@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -19,6 +20,9 @@ from model.utils.net_utils import (  # (1) here add a function to viz
 )
 from torch import Tensor
 from utils import read_media, write_media
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 pascal_classes = np.asarray(["__background__", "targetobject", "hand"])
 
@@ -179,7 +183,9 @@ def detect(
         ) = fasterRCNN(im_data, im_info, gt_boxes, num_boxes, box_info)
     toc = time.time()
     forward_time = toc - tic
-    print(f"Forward pass took {forward_time:.2f}s")
+    log.debug(f"Forward pass took {forward_time:.2f}s")
+
+    ## Postprocessing predicted results
     scores = cls_prob.data
     boxes = rois.data[:, :, 1:5]
 
@@ -284,7 +290,7 @@ def main(args: Args, cfg):
 
     for video_idx, video_name in enumerate(media_list):
         video_path = os.path.join(args.image_dir, video_name)
-        frames = read_media(video_path)
+        frames = read_media(video_path, bgr2rgb=False)
 
         print(f"Read {len(frames)} frames from {video_name}")
 
@@ -309,14 +315,19 @@ def main(args: Args, cfg):
             obj_dets, hand_dets = do_nms_and_visualize(
                 args, cfg, pred_boxes, scores, contact_indices, offset_vector, lr
             )
-            img_show_cv2 = vis_detections_filtered_objects(
-                frame, obj_dets, hand_dets, thresh=0.5
+            # img_show_cv2 = vis_detections_filtered_objects(
+            #     frame, obj_dets, hand_dets, thresh=0.5
+            # )
+            img_show = vis_detections_filtered_objects_PIL(
+                frame, obj_dets, hand_dets, args.thresh_hand, args.thresh_obj
             )
+            img_show = np.array(img_show)
+            img_show = img_show[..., :3]
             nms_toc = time.time()
             nms_time = nms_toc - nms_tic
 
             # Append frame to output frames
-            output_frames.append(img_show_cv2)
+            output_frames.append(img_show)
 
             # Profiling
             total_time = detect_time + nms_time

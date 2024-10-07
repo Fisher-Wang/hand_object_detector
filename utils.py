@@ -2,13 +2,16 @@ import cv2
 import numpy as np
 
 
-def read_media(path: str) -> list[np.ndarray]:
+def read_media(path: str, bgr2rgb: bool = True) -> list[np.ndarray]:
     if path.endswith(".png"):
-        return [read_png(path)]
+        frames = [read_png(path)]
     elif path.endswith(".mp4"):
-        return read_mp4(path)
+        frames = read_mp4(path)
     else:
         raise ValueError(f"Unsupported file type: {path}")
+    if bgr2rgb:
+        frames = [frame[..., ::-1] for frame in frames]
+    return frames
 
 
 def read_mp4(path: str) -> list[np.ndarray]:
@@ -27,7 +30,9 @@ def read_png(path: str) -> np.ndarray:
     return cv2.imread(path)
 
 
-def write_media(frames: list[np.ndarray], save_path: str):
+def write_media(frames: list[np.ndarray], save_path: str, rgb2bgr: bool = True):
+    if rgb2bgr:
+        frames = [frame[..., ::-1] for frame in frames]
     if len(frames) == 1:
         if not save_path.endswith(".png"):
             save_path = ".".join(save_path.split(".")[:-1] + ["png"])
