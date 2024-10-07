@@ -19,7 +19,7 @@ from model.utils.net_utils import (  # (1) here add a function to viz
     vis_detections_filtered_objects_PIL,
 )
 from torch import Tensor
-from utils import read_media, write_media
+from utils import read_media, write_media, write_pickle
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -293,8 +293,9 @@ def main(args: Args, cfg):
         print(f"Read {len(frames)} frames from {video_name}")
 
         # Process frames
-        # frames = frames[:5]
+        frames = frames[:5]
         output_frames = []
+        output_results = []
         for frame_idx, frame in enumerate(frames):
             print(f"Processing frame {frame_idx + 1}/{len(frames)}")
             # Process frame
@@ -324,8 +325,9 @@ def main(args: Args, cfg):
             nms_toc = time.time()
             nms_time = nms_toc - nms_tic
 
-            # Append frame to output frames
+            # Append to output
             output_frames.append(img_show)
+            output_results.append({"obj_dets": obj_dets, "hand_dets": hand_dets})
 
             # Profiling
             total_time = detect_time + nms_time
@@ -335,11 +337,13 @@ def main(args: Args, cfg):
                 f"NMS={nms_time:.2f}s",
             )
 
-        # Release resources
+        # Save results
         os.makedirs(args.save_dir, exist_ok=True)
         output_path = os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4")
         assert output_frames[0].dtype == np.uint8
         write_media(output_frames, output_path)
+        output_path = os.path.join(args.save_dir, f"{video_name[:-4]}.pkl")
+        write_pickle(output_results, output_path)
 
 
 if __name__ == "__main__":

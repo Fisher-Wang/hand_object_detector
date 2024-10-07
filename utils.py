@@ -1,3 +1,5 @@
+import pickle
+
 import cv2
 import numpy as np
 
@@ -75,3 +77,8 @@ def write_avc1_mp4(frames: list[np.ndarray], save_path: str, fps: int = 30):
     video.release()
     # Ensure the file is closed
     cv2.destroyAllWindows()
+
+
+def write_pickle(data, save_path: str):
+    with open(save_path, "wb") as f:
+        pickle.dump(data, f)
