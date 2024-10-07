@@ -20,7 +20,7 @@ from model.utils.net_utils import (  # (1) here add a function to viz
 )
 from torch import Tensor
 from tqdm import tqdm
-from utils import read_media, write_media, write_pickle
+from utils import AVC1MP4Writer, read_media, write_pickle
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -289,15 +289,19 @@ def main(args: Args, cfg):
 
     for video_idx, video_name in tqdm(list(enumerate(media_list))):
         video_path = os.path.join(args.image_dir, video_name)
-        frames = read_media(video_path, bgr2rgb=False)
+        frames = read_media(video_path)
+        os.makedirs(args.save_dir, exist_ok=True)
+        writer = AVC1MP4Writer(
+            os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4")
+        )
 
         tqdm.write(f"Read {len(frames)} frames from {video_name}")
 
         # Process frames
-        frames = frames[:5]
-        output_frames = []
         output_results = []
         for frame_idx, frame in enumerate(frames):
+            # if frame_idx >= 5:
+            #     break
             tqdm.write(f"Processing frame {frame_idx + 1}/{len(frames)}")
             # Process frame
             im_data, im_info, im_scales = preprocess_image(frame)
@@ -327,7 +331,7 @@ def main(args: Args, cfg):
             nms_time = nms_toc - nms_tic
 
             # Append to output
-            output_frames.append(img_show)
+            writer.write(img_show)
             output_results.append({"obj_dets": obj_dets, "hand_dets": hand_dets})
 
             # Profiling
@@ -343,12 +347,10 @@ def main(args: Args, cfg):
             )
 
         # Save results
-        os.makedirs(args.save_dir, exist_ok=True)
-        output_path = os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4")
-        assert output_frames[0].dtype == np.uint8
-        write_media(output_frames, output_path)
-        output_path = os.path.join(args.save_dir, f"{video_name[:-4]}.pkl")
-        write_pickle(output_results, output_path)
+        writer.release()
+        write_pickle(
+            output_results, os.path.join(args.save_dir, f"{video_name[:-4]}.pkl")
+        )
 
 
 if __name__ == "__main__":

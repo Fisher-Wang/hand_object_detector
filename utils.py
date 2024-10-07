@@ -1,31 +1,45 @@
 import pickle
+from typing import Sequence
 
 import cv2
 import numpy as np
 
 
-def read_media(path: str, bgr2rgb: bool = True) -> list[np.ndarray]:
+def read_media(path: str) -> Sequence[np.ndarray]:
     if path.endswith(".png"):
         frames = [read_png(path)]
     elif path.endswith(".mp4"):
         frames = read_mp4(path)
     else:
         raise ValueError(f"Unsupported file type: {path}")
-    if bgr2rgb:
-        frames = [frame[..., ::-1] for frame in frames]
     return frames
 
 
-def read_mp4(path: str) -> list[np.ndarray]:
-    cap = cv2.VideoCapture(path)
-    frames = []
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frames.append(frame)
-    cap.release()
-    return frames
+class MP4Reader:
+    def __init__(self, path: str):
+        self.cap = cv2.VideoCapture(path)
+        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if ret:
+                return frame
+            else:
+                self.cap.release()
+                raise StopIteration
+        else:
+            raise StopIteration
+
+    def __len__(self):
+        return self.frame_count
+
+
+def read_mp4(path: str):
+    return MP4Reader(path)
 
 
 def read_png(path: str) -> np.ndarray:
@@ -77,6 +91,38 @@ def write_avc1_mp4(frames: list[np.ndarray], save_path: str, fps: int = 30):
     video.release()
     # Ensure the file is closed
     cv2.destroyAllWindows()
+
+
+class AVC1MP4Writer:
+    def __init__(self, save_path: str, fps: int = 30, bgr2rgb: bool = True):
+        assert save_path.endswith(".mp4")
+        self.save_path = save_path
+        self.fps = fps
+        self.bgr2rgb = bgr2rgb
+        self.video = None
+        self.initialized = False
+
+    def write(self, frame: np.ndarray):
+        if not self.initialized:
+            h, w = frame.shape[:2]
+            isColor = len(frame.shape) == 3 and frame.shape[2] > 1
+            fourcc = cv2.VideoWriter_fourcc(*"avc1")  # Use H.264 codec
+            self.video = cv2.VideoWriter(
+                self.save_path, fourcc, self.fps, (w, h), isColor
+            )
+            self.initialized = True
+
+        if frame.dtype != np.uint8:
+            frame = (frame * 255).astype(np.uint8)
+        if self.bgr2rgb:
+            frame = frame[..., ::-1]
+        self.video.write(frame)
+
+    def release(self):
+        if self.video is not None:
+            self.video.release()
+            self.video = None
+        cv2.destroyAllWindows()
 
 
 def write_pickle(data, save_path: str):
