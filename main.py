@@ -29,8 +29,6 @@ pascal_classes = np.asarray(["__background__", "targetobject", "hand"])
 
 @dataclass
 class Args:
-    """Train a Fast R-CNN network"""
-
     dataset: str = "pascal_voc"
     """training dataset"""
     cfg_file: str = "cfgs/res101.yml"
@@ -227,7 +225,7 @@ def detect(
     return pred_boxes, scores, contact_indices, offset_vector, lr
 
 
-def do_nms_and_visualize(
+def do_NMS(
     args: Args,
     cfg,
     pred_boxes: Tensor,
@@ -312,7 +310,7 @@ def main(args: Args, cfg):
 
             # NMS and visualize
             nms_tic = time.time()
-            obj_dets, hand_dets = do_nms_and_visualize(
+            obj_dets, hand_dets = do_NMS(
                 args, cfg, pred_boxes, scores, contact_indices, offset_vector, lr
             )
             # img_show_cv2 = vis_detections_filtered_objects(
