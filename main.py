@@ -130,8 +130,6 @@ def load_model(args: Args, cfg) -> nn.Module:
         ),
     )
 
-    args.set_cfgs = ["ANCHOR_SCALES", "[8, 16, 32, 64]", "ANCHOR_RATIOS", "[0.5, 1, 2]"]
-
     # initilize the network here.
     if args.net == "res101":
         fasterRCNN = resnet(pascal_classes, 101, pretrained=False)
@@ -248,11 +246,11 @@ def do_nms_and_visualize(
 ):
     obj_dets, hand_dets = None, None
     for j in range(1, len(pascal_classes)):
-        # inds = torch.nonzero(scores[:,j] > thresh).view(-1)
-        if pascal_classes[j] == "hand":
-            inds = torch.nonzero(scores[:, j] > thresh_hand).view(-1)
-        elif pascal_classes[j] == "targetobject":
-            inds = torch.nonzero(scores[:, j] > thresh_obj).view(-1)
+        pascal_class = pascal_classes[j]
+        if pascal_class == "hand":
+            inds = torch.nonzero(scores[:, j] > args.thresh_hand).view(-1)
+        elif pascal_class == "targetobject":
+            inds = torch.nonzero(scores[:, j] > args.thresh_obj).view(-1)
 
         # if there is det
         if inds.numel() > 0:
@@ -274,53 +272,26 @@ def do_nms_and_visualize(
             cls_dets = cls_dets[order]
             # * TIPS: comment below line to see all detections
             cls_dets = cls_dets[keep.view(-1).long()]
-            if pascal_classes[j] == "targetobject":
+            if pascal_class == "targetobject":
                 obj_dets = cls_dets.cpu().numpy()
-            if pascal_classes[j] == "hand":
+            if pascal_class == "hand":
                 hand_dets = cls_dets.cpu().numpy()
-
-    print("obj_dets.shape", obj_dets.shape)  # (1, 10)
-    print("hand_dets.shape", hand_dets.shape)  # (2, 10)
-    print("thresh_hand", thresh_hand)  # 0.5
-    print("thresh_obj", thresh_obj)  # 0.5
 
     return obj_dets, hand_dets
 
 
-if __name__ == "__main__":
-    lr = cfg.TRAIN.LEARNING_RATE
-    momentum = cfg.TRAIN.MOMENTUM
-    weight_decay = cfg.TRAIN.WEIGHT_DECAY
-
-    args = tyro.cli(Args)
-    device = torch.device("cuda" if args.cuda else "cpu")
-
-    if args.cfg_file is not None:
-        cfg_from_file(args.cfg_file)
-    if args.set_cfgs is not None:
-        cfg_from_list(args.set_cfgs)
-
-    if args.cuda > 0:
-        cfg.CUDA = True
-    cfg.USE_GPU_NMS = args.cuda
+def main(args: Args, cfg):
     np.random.seed(cfg.RNG_SEED)
 
     fasterRCNN = load_model(args, cfg)
     fasterRCNN.to(device)
     fasterRCNN.eval()
 
-    start = time.time()
-    max_per_image = 100
-    thresh_hand = args.thresh_hand
-    thresh_obj = args.thresh_obj
-
-    print(f"image dir = {args.image_dir}")
-    print(f"save dir = {args.save_dir}")
+    print(f"Reading images from {args.image_dir}")
     imglist = os.listdir(args.image_dir)
     imglist = [img for img in imglist if img.endswith(".png") or img.endswith(".jpg")]
     num_images = len(imglist)
-
-    print("Loaded Photo: {} images.".format(num_images))
+    print(f"Loaded {num_images} images")
 
     for img_idx in range(num_images):
         # Load the demo image
@@ -347,7 +318,7 @@ if __name__ == "__main__":
         print(f"obj_dets: {obj_dets.shape}")
         print(f"hand_dets: {hand_dets.shape}")
         img_show_PIL = vis_detections_filtered_objects_PIL(
-            img, obj_dets, hand_dets, thresh_hand, thresh_obj=0.2
+            img, obj_dets, hand_dets, args.thresh_hand, args.thresh_obj
         )
         img_show_cv2 = vis_detections_filtered_objects(
             img, obj_dets, hand_dets, thresh=0.5
@@ -377,3 +348,22 @@ if __name__ == "__main__":
             f"NMS={nms_time:.2f}s",
             f"Save={save_time:.2f}s",
         )
+
+
+if __name__ == "__main__":
+    lr = cfg.TRAIN.LEARNING_RATE
+    momentum = cfg.TRAIN.MOMENTUM
+    weight_decay = cfg.TRAIN.WEIGHT_DECAY
+
+    args = tyro.cli(Args)
+
+    if args.cfg_file is not None:
+        cfg_from_file(args.cfg_file)
+    if args.set_cfgs is not None:
+        cfg_from_list(args.set_cfgs)
+    if args.cuda > 0:
+        cfg.CUDA = True
+    cfg.USE_GPU_NMS = args.cuda
+
+    device = torch.device("cuda" if args.cuda else "cpu")
+    main(args, cfg)
