@@ -241,6 +241,7 @@ if __name__ == '__main__':
       print(f'image dir = {args.image_dir}')
       print(f'save dir = {args.save_dir}')
       imglist = os.listdir(args.image_dir)
+      imglist = [img for img in imglist if img.endswith('.png') or img.endswith('.jpg')]
       num_images = len(imglist)
 
     print('Loaded Photo: {} images.'.format(num_images))
