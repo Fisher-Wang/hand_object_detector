@@ -1,18 +1,13 @@
-# --------------------------------------------------------
-# Tensorflow Faster R-CNN
-# Licensed under The MIT License [see LICENSE for details]
-# Written by Jiasen Lu, Jianwei Yang, based on code from Ross Girshick
-# --------------------------------------------------------
 from __future__ import absolute_import, division, print_function
 
 import argparse
 import os
 import pdb
-import pprint
 import sys
 import time
+from dataclasses import dataclass
+from typing import List, Optional
 
-import _init_paths
 import cv2
 import numpy as np
 import torch
@@ -21,10 +16,9 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
+import tyro
 from model.faster_rcnn.resnet import resnet
 from model.faster_rcnn.vgg16 import vgg16
-
-# from model.nms.nms_wrapper import nms
 from model.roi_layers import nms
 from model.rpn.bbox_transform import bbox_transform_inv, clip_boxes
 from model.utils.blob import im_list_to_blob
@@ -39,113 +33,56 @@ from model.utils.net_utils import (  # (1) here add a function to viz
 )
 from PIL import Image
 from roi_data_layer.roibatchLoader import roibatchLoader
-
-# from scipy.misc import imread
 from roi_data_layer.roidb import combined_roidb
 from torch.autograd import Variable
 
 
-def parse_args():
-    """
-    Parse input arguments
-    """
-    parser = argparse.ArgumentParser(description="Train a Fast R-CNN network")
-    parser.add_argument(
-        "--dataset",
-        dest="dataset",
-        help="training dataset",
-        default="pascal_voc",
-        type=str,
-    )
-    parser.add_argument(
-        "--cfg",
-        dest="cfg_file",
-        help="optional config file",
-        default="cfgs/res101.yml",
-        type=str,
-    )
-    parser.add_argument(
-        "--net",
-        dest="net",
-        help="vgg16, res50, res101, res152",
-        default="res101",
-        type=str,
-    )
-    parser.add_argument(
-        "--set",
-        dest="set_cfgs",
-        help="set config keys",
-        default=None,
-        nargs=argparse.REMAINDER,
-    )
-    parser.add_argument(
-        "--load_dir", dest="load_dir", help="directory to load models", default="models"
-    )
-    parser.add_argument(
-        "--image_dir",
-        dest="image_dir",
-        help="directory to load images for demo",
-        default="images",
-    )
-    parser.add_argument(
-        "--save_dir",
-        dest="save_dir",
-        help="directory to save results",
-        default="images_det",
-    )
-    parser.add_argument(
-        "--cuda", dest="cuda", help="whether use CUDA", action="store_true"
-    )
-    parser.add_argument(
-        "--mGPUs", dest="mGPUs", help="whether use multiple GPUs", action="store_true"
-    )
-    parser.add_argument(
-        "--cag",
-        dest="class_agnostic",
-        help="whether perform class_agnostic bbox regression",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--parallel_type",
-        dest="parallel_type",
-        help="which part of model to parallel, 0: all, 1: model before roi pooling",
-        default=0,
-        type=int,
-    )
-    parser.add_argument(
-        "--checksession",
-        dest="checksession",
-        help="checksession to load model",
-        default=1,
-        type=int,
-    )
-    parser.add_argument(
-        "--checkepoch",
-        dest="checkepoch",
-        help="checkepoch to load network",
-        default=8,
-        type=int,
-    )
-    parser.add_argument(
-        "--checkpoint",
-        dest="checkpoint",
-        help="checkpoint to load network",
-        default=89999,
-        type=int,
-        required=True,
-    )
-    parser.add_argument(
-        "--bs", dest="batch_size", help="batch_size", default=1, type=int
-    )
-    parser.add_argument("--vis", dest="vis", help="visualization mode", default=True)
-    parser.add_argument(
-        "--webcam_num", dest="webcam_num", help="webcam ID number", default=-1, type=int
-    )
-    parser.add_argument("--thresh_hand", type=float, default=0.5, required=False)
-    parser.add_argument("--thresh_obj", default=0.5, type=float, required=False)
+@dataclass
+class Args:
+    """Train a Fast R-CNN network"""
 
-    args = parser.parse_args()
-    return args
+    dataset: str = "pascal_voc"
+    """training dataset"""
+    cfg_file: str = "cfgs/res101.yml"
+    """optional config file"""
+    net: str = "res101"
+    """vgg16, res50, res101, res152"""
+    set_cfgs: Optional[List[str]] = None
+    """set config keys"""
+    load_dir: str = "models"
+    """directory to load models"""
+    image_dir: str = "images"
+    """directory to load images for demo"""
+    save_dir: str = "images_det"
+    """directory to save results"""
+    cuda: bool = True
+    """whether use CUDA"""
+    mGPUs: bool = False
+    """whether use multiple GPUs"""
+    class_agnostic: bool = False
+    """whether perform class_agnostic bbox regression"""
+    parallel_type: int = 0
+    """which part of model to parallel, 0: all, 1: model before roi pooling"""
+    checksession: int = 1
+    """checksession to load model"""
+    checkepoch: int = 8
+    """checkepoch to load network"""
+    checkpoint: int = 132028
+    """checkpoint to load network"""
+    batch_size: int = 1
+    """batch_size"""
+    vis: bool = True
+    """visualization mode"""
+    webcam_num: int = -1
+    """webcam ID number"""
+    thresh_hand: float = 0.5
+    """hand threshold"""
+    thresh_obj: float = 0.5
+    """object threshold"""
+
+
+def parse_args() -> Args:
+    return tyro.cli(Args)
 
 
 lr = cfg.TRAIN.LEARNING_RATE
