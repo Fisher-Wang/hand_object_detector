@@ -31,6 +31,7 @@ from model.utils.viz_hand_obj import draw_hand_mask, draw_line_point, draw_obj_m
 from PIL import Image, ImageDraw, ImageFont
 from roi_data_layer.roibatchLoader import roibatchLoader
 from roi_data_layer.roidb import combined_roidb
+from torch import Tensor
 from torch.autograd import Variable
 
 pascal_classes = np.asarray(["__background__", "targetobject", "hand"])
@@ -45,7 +46,7 @@ class Args:
     cfg_file: str = "cfgs/res101.yml"
     """optional config file"""
     net: str = "res101"
-    """vgg16, res50, res101, res152"""
+    """you can only choose res101"""
     set_cfgs: Optional[List[str]] = None
     """set config keys"""
     load_dir: str = "models"
@@ -115,7 +116,7 @@ def _get_image_blob(im):
     return blob, np.array(im_scale_factors)
 
 
-def load_model(args: Args, cfg):
+def load_model(args: Args, cfg) -> nn.Module:
     # load model
     model_dir = args.load_dir + "/" + args.net + "_handobj_100K" + "/" + args.dataset
     if not os.path.exists(model_dir):
@@ -132,17 +133,10 @@ def load_model(args: Args, cfg):
     args.set_cfgs = ["ANCHOR_SCALES", "[8, 16, 32, 64]", "ANCHOR_RATIOS", "[0.5, 1, 2]"]
 
     # initilize the network here.
-    if args.net == "vgg16":
-        fasterRCNN = vgg16(pascal_classes, pretrained=False)
-    elif args.net == "res101":
+    if args.net == "res101":
         fasterRCNN = resnet(pascal_classes, 101, pretrained=False)
-    elif args.net == "res50":
-        fasterRCNN = resnet(pascal_classes, 50, pretrained=False)
-    elif args.net == "res152":
-        fasterRCNN = resnet(pascal_classes, 152, pretrained=False)
     else:
-        print("network is not defined")
-        breakpoint()
+        raise ValueError(f"network {args.net} is not defined")
 
     fasterRCNN.create_architecture()
 
@@ -159,7 +153,7 @@ def load_model(args: Args, cfg):
     return fasterRCNN
 
 
-def preprocess_image(img):
+def preprocess_image(img: np.ndarray):
     blobs, im_scales = _get_image_blob(img)
     assert len(im_scales) == 1, "Only single-image batch implemented"
     im_blob = blobs
@@ -169,22 +163,24 @@ def preprocess_image(img):
 
     im_data = torch.from_numpy(im_blob).permute(0, 3, 1, 2).to(device)
     im_info = torch.from_numpy(im_info_np).to(device)
-    gt_boxes = torch.zeros((1, 1, 5)).to(device)
-    box_info = torch.zeros((1, 1, 5)).to(device)
-    return im_data, im_info, gt_boxes, box_info, im_scales
+    return im_data, im_info, im_scales
 
 
 def detect(
     args: Args,
     cfg,
-    fasterRCNN,
-    im_data,
-    im_info,
-    gt_boxes,
-    box_info,
-    im_scales,
+    fasterRCNN: nn.Module,
+    im_data: Tensor,
+    im_info: Tensor,
+    im_scales: np.ndarray,
 ):
-    num_boxes = torch.zeros(1)  # This is a dummy value
+    ## Dummy values
+    num_boxes = torch.zeros(1)
+    gt_boxes = torch.zeros((1, 1, 5)).to(device)
+    box_info = torch.zeros((1, 1, 5)).to(device)
+
+    ## Forward pass
+    tic = time.time()
     (
         rois,
         cls_prob,
@@ -196,7 +192,9 @@ def detect(
         rois_label,
         loss_list,
     ) = fasterRCNN(im_data, im_info, gt_boxes, num_boxes, box_info)
-
+    toc = time.time()
+    forward_time = toc - tic
+    print(f"Forward pass took {forward_time:.2f}s")
     scores = cls_prob.data
     boxes = rois.data[:, :, 1:5]
 
@@ -239,7 +237,13 @@ def detect(
 
 
 def do_nms_and_visualize(
-    args: Args, cfg, img, pred_boxes, scores, contact_indices, offset_vector, lr
+    args: Args,
+    cfg,
+    pred_boxes: Tensor,
+    scores: Tensor,
+    contact_indices: Tensor,
+    offset_vector: Tensor,
+    lr: Tensor,
 ):
     obj_dets, hand_dets = None, None
     for j in range(1, len(pascal_classes)):
@@ -323,19 +327,12 @@ if __name__ == "__main__":
         for img_idx in range(num_images):
             # Load the demo image
             img = cv2.imread(os.path.join(args.image_dir, imglist[img_idx]))
-            im_data, im_info, gt_boxes, box_info, im_scales = preprocess_image(img)
+            im_data, im_info, im_scales = preprocess_image(img)
 
             ## Detect
             det_tic = time.time()
             pred_boxes, scores, contact_indices, offset_vector, lr = detect(
-                args,
-                cfg,
-                fasterRCNN,
-                im_data,
-                im_info,
-                gt_boxes,
-                box_info,
-                im_scales,
+                args, cfg, fasterRCNN, im_data, im_info, im_scales
             )
             print("scores.shape", scores.shape)  # (300, 3), 3 is the number of classes
             print(
@@ -347,7 +344,7 @@ if __name__ == "__main__":
             ## NMS and visualize
             nms_tic = time.time()
             obj_dets, hand_dets = do_nms_and_visualize(
-                args, cfg, img, pred_boxes, scores, contact_indices, offset_vector, lr
+                args, cfg, pred_boxes, scores, contact_indices, offset_vector, lr
             )
             print(f"obj_dets: {obj_dets.shape}")
             print(f"hand_dets: {hand_dets.shape}")
@@ -377,9 +374,10 @@ if __name__ == "__main__":
             save_time = save_toc - save_tic
 
             ## Profiling
+            total_time = detect_time + nms_time + save_time
             print(
-                f"Detected image {img_idx + 1}/{num_images} in",
-                f"detect: {detect_time:.2f}s",
-                f"NMS: {nms_time:.2f}s",
-                f"save: {save_time:.2f}s",
+                f"Detected image {img_idx + 1}/{num_images} in {total_time:.2f}s, with",
+                f"Detect={detect_time:.2f}s",
+                f"NMS={nms_time:.2f}s",
+                f"Save={save_time:.2f}s",
             )
