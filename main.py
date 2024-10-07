@@ -36,6 +36,8 @@ from roi_data_layer.roibatchLoader import roibatchLoader
 from roi_data_layer.roidb import combined_roidb
 from torch.autograd import Variable
 
+pascal_classes = np.asarray(["__background__", "targetobject", "hand"])
+
 
 @dataclass
 class Args:
@@ -73,21 +75,10 @@ class Args:
     """batch_size"""
     vis: bool = True
     """visualization mode"""
-    webcam_num: int = -1
-    """webcam ID number"""
     thresh_hand: float = 0.5
     """hand threshold"""
     thresh_obj: float = 0.5
     """object threshold"""
-
-
-def parse_args() -> Args:
-    return tyro.cli(Args)
-
-
-lr = cfg.TRAIN.LEARNING_RATE
-momentum = cfg.TRAIN.MOMENTUM
-weight_decay = cfg.TRAIN.WEIGHT_DECAY
 
 
 def _get_image_blob(im):
@@ -131,21 +122,7 @@ def _get_image_blob(im):
     return blob, np.array(im_scale_factors)
 
 
-if __name__ == "__main__":
-
-    args = parse_args()
-
-    # print('Called with args:')
-    # print(args)
-
-    if args.cfg_file is not None:
-        cfg_from_file(args.cfg_file)
-    if args.set_cfgs is not None:
-        cfg_from_list(args.set_cfgs)
-
-    cfg.USE_GPU_NMS = args.cuda
-    np.random.seed(cfg.RNG_SEED)
-
+def load_model(args, cfg):
     # load model
     model_dir = args.load_dir + "/" + args.net + "_handobj_100K" + "/" + args.dataset
     if not os.path.exists(model_dir):
@@ -159,7 +136,6 @@ if __name__ == "__main__":
         ),
     )
 
-    pascal_classes = np.asarray(["__background__", "targetobject", "hand"])
     args.set_cfgs = ["ANCHOR_SCALES", "[8, 16, 32, 64]", "ANCHOR_RATIOS", "[0.5, 1, 2]"]
 
     # initilize the network here.
@@ -195,6 +171,25 @@ if __name__ == "__main__":
         cfg.POOLING_MODE = checkpoint["pooling_mode"]
 
     print("load model successfully!")
+    return fasterRCNN
+
+
+if __name__ == "__main__":
+    lr = cfg.TRAIN.LEARNING_RATE
+    momentum = cfg.TRAIN.MOMENTUM
+    weight_decay = cfg.TRAIN.WEIGHT_DECAY
+
+    args = tyro.cli(Args)
+
+    if args.cfg_file is not None:
+        cfg_from_file(args.cfg_file)
+    if args.set_cfgs is not None:
+        cfg_from_list(args.set_cfgs)
+
+    cfg.USE_GPU_NMS = args.cuda
+    np.random.seed(cfg.RNG_SEED)
+
+    fasterRCNN = load_model(args, cfg)
 
     # initilize the tensor holder here.
     im_data = torch.FloatTensor(1)
@@ -225,43 +220,23 @@ if __name__ == "__main__":
         thresh_obj = args.thresh_obj
         vis = args.vis
 
-        # print(f'thresh_hand = {thresh_hand}')
-        # print(f'thnres_obj = {thresh_obj}')
-
-        webcam_num = args.webcam_num
-        # Set up webcam or get image directories
-        if webcam_num >= 0:
-            cap = cv2.VideoCapture(webcam_num)
-            num_images = 0
-        else:
-            print(f"image dir = {args.image_dir}")
-            print(f"save dir = {args.save_dir}")
-            imglist = os.listdir(args.image_dir)
-            imglist = [
-                img for img in imglist if img.endswith(".png") or img.endswith(".jpg")
-            ]
-            num_images = len(imglist)
+        print(f"image dir = {args.image_dir}")
+        print(f"save dir = {args.save_dir}")
+        imglist = os.listdir(args.image_dir)
+        imglist = [
+            img for img in imglist if img.endswith(".png") or img.endswith(".jpg")
+        ]
+        num_images = len(imglist)
 
         print("Loaded Photo: {} images.".format(num_images))
 
         while num_images >= 0:
             total_tic = time.time()
-            if webcam_num == -1:
-                num_images -= 1
+            num_images -= 1
 
-            # Get image from the webcam
-            if webcam_num >= 0:
-                if not cap.isOpened():
-                    raise RuntimeError(
-                        "Webcam could not open. Please check connection."
-                    )
-                ret, frame = cap.read()
-                im_in = np.array(frame)
             # Load the demo image
-            else:
-                im_file = os.path.join(args.image_dir, imglist[num_images])
-                im_in = cv2.imread(im_file)
-            # bgr
+            im_file = os.path.join(args.image_dir, imglist[num_images])
+            im_in = cv2.imread(im_file)
             im = im_in
 
             blobs, im_scales = _get_image_blob(im)
@@ -413,15 +388,14 @@ if __name__ == "__main__":
             misc_toc = time.time()
             nms_time = misc_toc - misc_tic
 
-            if webcam_num == -1:
-                sys.stdout.write(
-                    "im_detect: {:d}/{:d} {:.3f}s {:.3f}s   \r".format(
-                        num_images + 1, len(imglist), detect_time, nms_time
-                    )
+            sys.stdout.write(
+                "im_detect: {:d}/{:d} {:.3f}s {:.3f}s   \r".format(
+                    num_images + 1, len(imglist), detect_time, nms_time
                 )
-                sys.stdout.flush()
+            )
+            sys.stdout.flush()
 
-            if vis and webcam_num == -1:
+            if vis:
 
                 folder_name = args.save_dir
                 os.makedirs(folder_name, exist_ok=True)
@@ -429,16 +403,3 @@ if __name__ == "__main__":
                     folder_name, imglist[num_images][:-4] + "_det.png"
                 )
                 im2show.save(result_path)
-            else:
-                im2showRGB = cv2.cvtColor(im2show, cv2.COLOR_BGR2RGB)
-                cv2.imshow("frame", im2showRGB)
-                total_toc = time.time()
-                total_time = total_toc - total_tic
-                frame_rate = 1 / total_time
-                print("Frame rate:", frame_rate)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
-
-        if webcam_num >= 0:
-            cap.release()
-            cv2.destroyAllWindows()
