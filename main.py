@@ -172,6 +172,21 @@ def load_model(args: Args, cfg):
     return fasterRCNN
 
 
+def preprocess_image(img):
+    blobs, im_scales = _get_image_blob(img)
+    assert len(im_scales) == 1, "Only single-image batch implemented"
+    im_blob = blobs
+    im_info_np = np.array(
+        [[im_blob.shape[1], im_blob.shape[2], im_scales[0]]], dtype=np.float32
+    )
+
+    im_data = torch.from_numpy(im_blob).permute(0, 3, 1, 2).to(device)
+    im_info = torch.from_numpy(im_info_np).to(device)
+    gt_boxes = torch.zeros((1, 1, 5)).to(device)
+    box_info = torch.zeros((1, 1, 5)).to(device)
+    return im_data, im_info, gt_boxes, box_info, im_scales
+
+
 def detect(
     args: Args,
     cfg,
@@ -247,7 +262,9 @@ def detect(
     return pred_boxes, scores, contact_indices, offset_vector, lr
 
 
-def misc(args: Args, cfg, img, pred_boxes, scores, contact_indices, offset_vector, lr):
+def do_nms_and_visualize(
+    args: Args, cfg, img, pred_boxes, scores, contact_indices, offset_vector, lr
+):
     img_show = np.copy(img)
     obj_dets, hand_dets = None, None
     for j in range(1, len(pascal_classes)):
@@ -334,22 +351,8 @@ if __name__ == "__main__":
 
         for img_idx in range(num_images):
             # Load the demo image
-            im_file = os.path.join(args.image_dir, imglist[img_idx])
-            im_in = cv2.imread(im_file)
-            im = im_in
-
-            blobs, im_scales = _get_image_blob(im)
-            assert len(im_scales) == 1, "Only single-image batch implemented"
-            im_blob = blobs
-            im_info_np = np.array(
-                [[im_blob.shape[1], im_blob.shape[2], im_scales[0]]], dtype=np.float32
-            )
-
-            im_data = torch.from_numpy(im_blob).permute(0, 3, 1, 2).to(device)
-            im_info = torch.from_numpy(im_info_np).to(device)
-            gt_boxes = torch.zeros((1, 1, 5)).to(device)
-            box_info = torch.zeros((1, 1, 5)).to(device)
-
+            img = cv2.imread(os.path.join(args.image_dir, imglist[img_idx]))
+            im_data, im_info, gt_boxes, box_info, im_scales = preprocess_image(img)
             ## Detect
             det_tic = time.time()
             pred_boxes, scores, contact_indices, offset_vector, lr = detect(
@@ -369,13 +372,13 @@ if __name__ == "__main__":
             det_toc = time.time()
             detect_time = det_toc - det_tic
 
-            ## Misc
-            misc_tic = time.time()
-            img_show = misc(
-                args, cfg, im, pred_boxes, scores, contact_indices, offset_vector, lr
+            ## NMS and visualize
+            nms_tic = time.time()
+            img_show = do_nms_and_visualize(
+                args, cfg, img, pred_boxes, scores, contact_indices, offset_vector, lr
             )
-            misc_toc = time.time()
-            nms_time = misc_toc - misc_tic
+            nms_toc = time.time()
+            nms_time = nms_toc - nms_tic
 
             ## Save
             print(
