@@ -179,10 +179,10 @@ def detect(
     im_data,
     im_info,
     gt_boxes,
-    num_boxes,
     box_info,
     im_scales,
 ):
+    num_boxes = torch.zeros(1)  # This is a dummy value
     (
         rois,
         cls_prob,
@@ -247,8 +247,8 @@ def detect(
     return pred_boxes, scores, contact_indices, offset_vector, lr
 
 
-def misc(args: Args, cfg, im, pred_boxes, scores, contact_indices, offset_vector, lr):
-    im2show = np.copy(im)
+def misc(args: Args, cfg, img, pred_boxes, scores, contact_indices, offset_vector, lr):
+    img_show = np.copy(img)
     obj_dets, hand_dets = None, None
     for j in range(1, len(pascal_classes)):
         # inds = torch.nonzero(scores[:,j] > thresh).view(-1)
@@ -265,6 +265,7 @@ def misc(args: Args, cfg, im, pred_boxes, scores, contact_indices, offset_vector
                 cls_boxes = pred_boxes[inds, :]
             else:
                 cls_boxes = pred_boxes[inds][:, j * 4 : (j + 1) * 4]
+            keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
 
             cls_dets = torch.cat(
                 (
@@ -277,22 +278,20 @@ def misc(args: Args, cfg, im, pred_boxes, scores, contact_indices, offset_vector
                 1,
             )
             cls_dets = cls_dets[order]
-            keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
             cls_dets = cls_dets[keep.view(-1).long()]
             if pascal_classes[j] == "targetobject":
                 obj_dets = cls_dets.cpu().numpy()
             if pascal_classes[j] == "hand":
                 hand_dets = cls_dets.cpu().numpy()
 
-    # breakpoint()
-    # obj_dets: (1, 10)
-    # hand_dets: (2, 10)
-    # thresh_hand = 0.5
-    # thresh_obj = 0.5
-    im2show = vis_detections_filtered_objects_PIL(
-        im2show, obj_dets, hand_dets, thresh_hand, thresh_obj
+    print("obj_dets.shape", obj_dets.shape)  # (1, 10)
+    print("hand_dets.shape", hand_dets.shape)  # (2, 10)
+    print("thresh_hand", thresh_hand)  # 0.5
+    print("thresh_obj", thresh_obj)  # 0.5
+    img_show = vis_detections_filtered_objects_PIL(
+        img_show, obj_dets, hand_dets, thresh_hand, thresh_obj
     )
-    return im2show
+    return img_show
 
 
 if __name__ == "__main__":
@@ -349,7 +348,6 @@ if __name__ == "__main__":
             im_data = torch.from_numpy(im_blob).permute(0, 3, 1, 2).to(device)
             im_info = torch.from_numpy(im_info_np).to(device)
             gt_boxes = torch.zeros((1, 1, 5)).to(device)
-            num_boxes = torch.zeros(1).to(device)
             box_info = torch.zeros((1, 1, 5)).to(device)
 
             ## Detect
@@ -361,7 +359,6 @@ if __name__ == "__main__":
                 im_data,
                 im_info,
                 gt_boxes,
-                num_boxes,
                 box_info,
                 im_scales,
             )
@@ -374,7 +371,7 @@ if __name__ == "__main__":
 
             ## Misc
             misc_tic = time.time()
-            im2show = misc(
+            img_show = misc(
                 args, cfg, im, pred_boxes, scores, contact_indices, offset_vector, lr
             )
             misc_toc = time.time()
@@ -390,4 +387,4 @@ if __name__ == "__main__":
             result_path = os.path.join(
                 args.save_dir, imglist[img_idx][:-4] + "_det.png"
             )
-            im2show.save(result_path)
+            img_show.save(result_path)
