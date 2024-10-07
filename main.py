@@ -178,16 +178,21 @@ if __name__ == "__main__":
     weight_decay = cfg.TRAIN.WEIGHT_DECAY
 
     args = tyro.cli(Args)
+    device = torch.device("cuda" if args.cuda else "cpu")
 
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
     if args.set_cfgs is not None:
         cfg_from_list(args.set_cfgs)
 
+    if args.cuda > 0:
+        cfg.CUDA = True
     cfg.USE_GPU_NMS = args.cuda
     np.random.seed(cfg.RNG_SEED)
 
     fasterRCNN = load_model(args, cfg)
+    fasterRCNN.to(device)
+    fasterRCNN.eval()
 
     # initilize the tensor holder here.
     im_data = torch.FloatTensor(1)
@@ -196,22 +201,12 @@ if __name__ == "__main__":
     gt_boxes = torch.FloatTensor(1)
     box_info = torch.FloatTensor(1)
 
-    # ship to cuda
-    if args.cuda > 0:
-        im_data = im_data.cuda()
-        im_info = im_info.cuda()
-        num_boxes = num_boxes.cuda()
-        gt_boxes = gt_boxes.cuda()
+    im_data = im_data.to(device)
+    im_info = im_info.to(device)
+    num_boxes = num_boxes.to(device)
+    gt_boxes = gt_boxes.to(device)
 
     with torch.no_grad():
-        if args.cuda > 0:
-            cfg.CUDA = True
-
-        if args.cuda > 0:
-            fasterRCNN.cuda()
-
-        fasterRCNN.eval()
-
         start = time.time()
         max_per_image = 100
         thresh_hand = args.thresh_hand
@@ -227,12 +222,11 @@ if __name__ == "__main__":
 
         print("Loaded Photo: {} images.".format(num_images))
 
-        while num_images >= 0:
+        for img_idx in range(num_images):
             total_tic = time.time()
-            num_images -= 1
 
             # Load the demo image
-            im_file = os.path.join(args.image_dir, imglist[num_images])
+            im_file = os.path.join(args.image_dir, imglist[img_idx])
             im_in = cv2.imread(im_file)
             im = im_in
 
@@ -293,37 +287,23 @@ if __name__ == "__main__":
                 if cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED:
                     # Optionally normalize targets by a precomputed mean and stdev
                     if args.class_agnostic:
-                        if args.cuda > 0:
-                            box_deltas = (
-                                box_deltas.view(-1, 4)
-                                * torch.FloatTensor(
-                                    cfg.TRAIN.BBOX_NORMALIZE_STDS
-                                ).cuda()
-                                + torch.FloatTensor(
-                                    cfg.TRAIN.BBOX_NORMALIZE_MEANS
-                                ).cuda()
-                            )
-                        else:
-                            box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
-                                cfg.TRAIN.BBOX_NORMALIZE_STDS
-                            ) + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS)
+                        box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
+                            cfg.TRAIN.BBOX_NORMALIZE_STDS
+                        ).to(device) + torch.FloatTensor(
+                            cfg.TRAIN.BBOX_NORMALIZE_MEANS
+                        ).to(
+                            device
+                        )
 
                         box_deltas = box_deltas.view(1, -1, 4)
                     else:
-                        if args.cuda > 0:
-                            box_deltas = (
-                                box_deltas.view(-1, 4)
-                                * torch.FloatTensor(
-                                    cfg.TRAIN.BBOX_NORMALIZE_STDS
-                                ).cuda()
-                                + torch.FloatTensor(
-                                    cfg.TRAIN.BBOX_NORMALIZE_MEANS
-                                ).cuda()
-                            )
-                        else:
-                            box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
-                                cfg.TRAIN.BBOX_NORMALIZE_STDS
-                            ) + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS)
+                        box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
+                            cfg.TRAIN.BBOX_NORMALIZE_STDS
+                        ).to(device) + torch.FloatTensor(
+                            cfg.TRAIN.BBOX_NORMALIZE_MEANS
+                        ).to(
+                            device
+                        )
                         box_deltas = box_deltas.view(1, -1, 4 * len(pascal_classes))
 
                 pred_boxes = bbox_transform_inv(boxes, box_deltas, 1)
@@ -384,12 +364,12 @@ if __name__ == "__main__":
 
             print(
                 "im_detect: {:d}/{:d} {:.3f}s {:.3f}s   \r".format(
-                    num_images + 1, len(imglist), detect_time, nms_time
+                    img_idx + 1, num_images, detect_time, nms_time
                 )
             )
 
             os.makedirs(args.save_dir, exist_ok=True)
             result_path = os.path.join(
-                args.save_dir, imglist[num_images][:-4] + "_det.png"
+                args.save_dir, imglist[img_idx][:-4] + "_det.png"
             )
             im2show.save(result_path)
