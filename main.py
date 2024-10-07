@@ -73,8 +73,6 @@ class Args:
     """checkpoint to load network"""
     batch_size: int = 1
     """batch_size"""
-    vis: bool = True
-    """visualization mode"""
     thresh_hand: float = 0.5
     """hand threshold"""
     thresh_obj: float = 0.5
@@ -157,7 +155,7 @@ def load_model(args, cfg):
         )
     else:
         print("network is not defined")
-        pdb.set_trace()
+        breakpoint()
 
     fasterRCNN.create_architecture()
 
@@ -218,7 +216,6 @@ if __name__ == "__main__":
         max_per_image = 100
         thresh_hand = args.thresh_hand
         thresh_obj = args.thresh_obj
-        vis = args.vis
 
         print(f"image dir = {args.image_dir}")
         print(f"save dir = {args.save_dir}")
@@ -342,8 +339,7 @@ if __name__ == "__main__":
             det_toc = time.time()
             detect_time = det_toc - det_tic
             misc_tic = time.time()
-            if vis:
-                im2show = np.copy(im)
+            im2show = np.copy(im)
             obj_dets, hand_dets = None, None
             for j in range(1, len(pascal_classes)):
                 # inds = torch.nonzero(scores[:,j] > thresh).view(-1)
@@ -379,27 +375,21 @@ if __name__ == "__main__":
                     if pascal_classes[j] == "hand":
                         hand_dets = cls_dets.cpu().numpy()
 
-            if vis:
-                # visualization
-                im2show = vis_detections_filtered_objects_PIL(
-                    im2show, obj_dets, hand_dets, thresh_hand, thresh_obj
-                )
+            im2show = vis_detections_filtered_objects_PIL(
+                im2show, obj_dets, hand_dets, thresh_hand, thresh_obj
+            )
 
             misc_toc = time.time()
             nms_time = misc_toc - misc_tic
 
-            sys.stdout.write(
+            print(
                 "im_detect: {:d}/{:d} {:.3f}s {:.3f}s   \r".format(
                     num_images + 1, len(imglist), detect_time, nms_time
                 )
             )
-            sys.stdout.flush()
 
-            if vis:
-
-                folder_name = args.save_dir
-                os.makedirs(folder_name, exist_ok=True)
-                result_path = os.path.join(
-                    folder_name, imglist[num_images][:-4] + "_det.png"
-                )
-                im2show.save(result_path)
+            os.makedirs(args.save_dir, exist_ok=True)
+            result_path = os.path.join(
+                args.save_dir, imglist[num_images][:-4] + "_det.png"
+            )
+            im2show.save(result_path)
