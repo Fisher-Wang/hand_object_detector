@@ -18,7 +18,7 @@ from model.utils.net_utils import (  # (1) here add a function to viz
     vis_detections_filtered_objects_PIL,
 )
 from torch import Tensor
-from utils import write_avc1_mp4
+from utils import read_media, write_media
 
 pascal_classes = np.asarray(["__background__", "targetobject", "hand"])
 
@@ -274,38 +274,25 @@ def main(args: Args, cfg):
     fasterRCNN.eval()
 
     print(f"Reading videos from {args.image_dir}")
-    videolist = [v for v in os.listdir(args.image_dir) if v.endswith(".mp4")]
-    num_videos = len(videolist)
-    print(f"Loaded {num_videos} videos")
+    media_list = [
+        v
+        for v in os.listdir(args.image_dir)
+        if v.endswith(".mp4") or v.endswith(".png")
+    ]
+    num_videos = len(media_list)
+    print(f"Loaded {num_videos} images and videos")
 
-    for video_idx, video_name in enumerate(videolist):
+    for video_idx, video_name in enumerate(media_list):
         video_path = os.path.join(args.image_dir, video_name)
-        cap = cv2.VideoCapture(video_path)
+        frames = read_media(video_path)
 
-        # Get video properties
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        # Read all frames
-        frames = []
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frames.append(frame)
-        cap.release()
-
-        print(f"Read {len(frames)} frames from video {video_name}")
-
-        # Prepare output video writer
-        os.makedirs(args.save_dir, exist_ok=True)
+        print(f"Read {len(frames)} frames from {video_name}")
 
         # Process frames
+        # frames = frames[:5]
         output_frames = []
         for frame_idx, frame in enumerate(frames):
             print(f"Processing frame {frame_idx + 1}/{len(frames)}")
-            print(f"Frame shape: {frame.shape}")
             # Process frame
             im_data, im_info, im_scales = preprocess_image(frame)
 
@@ -334,15 +321,16 @@ def main(args: Args, cfg):
             # Profiling
             total_time = detect_time + nms_time
             print(
-                f"Processed video {video_idx + 1}/{num_videos}, frame {frame_idx + 1}/{len(frames)} in {total_time:.2f}s, with",
+                f"Processed media {video_idx + 1}/{num_videos}, frame {frame_idx + 1}/{len(frames)} in {total_time:.2f}s, with",
                 f"Detect={detect_time:.2f}s",
                 f"NMS={nms_time:.2f}s",
             )
 
         # Release resources
+        os.makedirs(args.save_dir, exist_ok=True)
         output_path = os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4")
         assert output_frames[0].dtype == np.uint8
-        write_avc1_mp4(output_frames, output_path)
+        write_media(output_frames, output_path)
 
 
 if __name__ == "__main__":
