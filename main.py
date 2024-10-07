@@ -181,17 +181,18 @@ def detect(
 
     ## Forward pass
     tic = time.time()
-    (
-        rois,
-        cls_prob,
-        bbox_pred,
-        rpn_loss_cls,
-        rpn_loss_box,
-        RCNN_loss_cls,
-        RCNN_loss_bbox,
-        rois_label,
-        loss_list,
-    ) = fasterRCNN(im_data, im_info, gt_boxes, num_boxes, box_info)
+    with torch.inference_mode():
+        (
+            rois,
+            cls_prob,
+            bbox_pred,
+            rpn_loss_cls,
+            rpn_loss_box,
+            RCNN_loss_cls,
+            RCNN_loss_bbox,
+            rois_label,
+            loss_list,
+        ) = fasterRCNN(im_data, im_info, gt_boxes, num_boxes, box_info)
     toc = time.time()
     forward_time = toc - tic
     print(f"Forward pass took {forward_time:.2f}s")
@@ -308,76 +309,71 @@ if __name__ == "__main__":
     fasterRCNN.to(device)
     fasterRCNN.eval()
 
-    with torch.no_grad():
-        start = time.time()
-        max_per_image = 100
-        thresh_hand = args.thresh_hand
-        thresh_obj = args.thresh_obj
+    start = time.time()
+    max_per_image = 100
+    thresh_hand = args.thresh_hand
+    thresh_obj = args.thresh_obj
 
-        print(f"image dir = {args.image_dir}")
-        print(f"save dir = {args.save_dir}")
-        imglist = os.listdir(args.image_dir)
-        imglist = [
-            img for img in imglist if img.endswith(".png") or img.endswith(".jpg")
-        ]
-        num_images = len(imglist)
+    print(f"image dir = {args.image_dir}")
+    print(f"save dir = {args.save_dir}")
+    imglist = os.listdir(args.image_dir)
+    imglist = [img for img in imglist if img.endswith(".png") or img.endswith(".jpg")]
+    num_images = len(imglist)
 
-        print("Loaded Photo: {} images.".format(num_images))
+    print("Loaded Photo: {} images.".format(num_images))
 
-        for img_idx in range(num_images):
-            # Load the demo image
-            img = cv2.imread(os.path.join(args.image_dir, imglist[img_idx]))
-            im_data, im_info, im_scales = preprocess_image(img)
+    for img_idx in range(num_images):
+        # Load the demo image
+        img = cv2.imread(os.path.join(args.image_dir, imglist[img_idx]))
+        im_data, im_info, im_scales = preprocess_image(img)
 
-            ## Detect
-            det_tic = time.time()
-            pred_boxes, scores, contact_indices, offset_vector, lr = detect(
-                args, cfg, fasterRCNN, im_data, im_info, im_scales
-            )
-            print("scores.shape", scores.shape)  # (300, 3), 3 is the number of classes
-            print(
-                "pred_boxes.shape", pred_boxes.shape
-            )  # (300, 12=3*4), 4 is the length of bbox
-            det_toc = time.time()
-            detect_time = det_toc - det_tic
+        ## Detect
+        det_tic = time.time()
+        pred_boxes, scores, contact_indices, offset_vector, lr = detect(
+            args, cfg, fasterRCNN, im_data, im_info, im_scales
+        )
+        print("scores.shape", scores.shape)  # (300, 3), 3 is the number of classes
+        print(
+            "pred_boxes.shape", pred_boxes.shape
+        )  # (300, 12=3*4), 4 is the length of bbox
+        det_toc = time.time()
+        detect_time = det_toc - det_tic
 
-            ## NMS and visualize
-            nms_tic = time.time()
-            obj_dets, hand_dets = do_nms_and_visualize(
-                args, cfg, pred_boxes, scores, contact_indices, offset_vector, lr
-            )
-            print(f"obj_dets: {obj_dets.shape}")
-            print(f"hand_dets: {hand_dets.shape}")
-            img_show_PIL = vis_detections_filtered_objects_PIL(
-                img, obj_dets, hand_dets, thresh_hand, thresh_obj=0.2
-            )
-            img_show_cv2 = vis_detections_filtered_objects(
-                img, obj_dets, hand_dets, thresh=0.5
-            )
-            nms_toc = time.time()
-            nms_time = nms_toc - nms_tic
+        ## NMS and visualize
+        nms_tic = time.time()
+        obj_dets, hand_dets = do_nms_and_visualize(
+            args, cfg, pred_boxes, scores, contact_indices, offset_vector, lr
+        )
+        print(f"obj_dets: {obj_dets.shape}")
+        print(f"hand_dets: {hand_dets.shape}")
+        img_show_PIL = vis_detections_filtered_objects_PIL(
+            img, obj_dets, hand_dets, thresh_hand, thresh_obj=0.2
+        )
+        img_show_cv2 = vis_detections_filtered_objects(
+            img, obj_dets, hand_dets, thresh=0.5
+        )
+        nms_toc = time.time()
+        nms_time = nms_toc - nms_tic
 
-            ## Save
-            save_tic = time.time()
-            os.makedirs(args.save_dir, exist_ok=True)
+        ## Save
+        save_tic = time.time()
+        os.makedirs(args.save_dir, exist_ok=True)
 
-            result_path = os.path.join(
-                args.save_dir, imglist[img_idx][:-4] + "_det.png"
-            )
-            img_show_PIL.save(result_path)
+        result_path = os.path.join(args.save_dir, imglist[img_idx][:-4] + "_det.png")
+        img_show_PIL.save(result_path)
 
-            result_path = os.path.join(
-                args.save_dir, imglist[img_idx][:-4] + "_det_cv2.png"
-            )
-            cv2.imwrite(result_path, img_show_cv2)
-            save_toc = time.time()
-            save_time = save_toc - save_tic
+        result_path = os.path.join(
+            args.save_dir, imglist[img_idx][:-4] + "_det_cv2.png"
+        )
+        cv2.imwrite(result_path, img_show_cv2)
+        save_toc = time.time()
+        save_time = save_toc - save_tic
 
-            ## Profiling
-            total_time = detect_time + nms_time + save_time
-            print(
-                f"Detected image {img_idx + 1}/{num_images} in {total_time:.2f}s, with",
-                f"Detect={detect_time:.2f}s",
-                f"NMS={nms_time:.2f}s",
-                f"Save={save_time:.2f}s",
-            )
+        ## Profiling
+        total_time = detect_time + nms_time + save_time
+        print(
+            f"Detected image {img_idx + 1}/{num_images} in {total_time:.2f}s, with",
+            f"Detect={detect_time:.2f}s",
+            f"NMS={nms_time:.2f}s",
+            f"Save={save_time:.2f}s",
+        )
