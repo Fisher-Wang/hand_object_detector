@@ -24,14 +24,8 @@ from model.rpn.bbox_transform import bbox_transform_inv, clip_boxes
 from model.utils.blob import im_list_to_blob
 from model.utils.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
 from model.utils.net_utils import (  # (1) here add a function to viz
-    calculate_center,
-    filter_object,
-    load_net,
-    save_net,
-    vis_detections,
     vis_detections_filtered_objects,
     vis_detections_filtered_objects_PIL,
-    vis_detections_PIL,
 )
 from model.utils.viz_hand_obj import draw_hand_mask, draw_line_point, draw_obj_mask
 from PIL import Image, ImageDraw, ImageFont
@@ -273,6 +267,7 @@ def do_nms_and_visualize(
                 1,
             )
             cls_dets = cls_dets[order]
+            # * TIPS: comment below line to see all detections
             cls_dets = cls_dets[keep.view(-1).long()]
             if pascal_classes[j] == "targetobject":
                 obj_dets = cls_dets.cpu().numpy()
@@ -285,67 +280,6 @@ def do_nms_and_visualize(
     print("thresh_obj", thresh_obj)  # 0.5
 
     return obj_dets, hand_dets
-
-
-def vis_detections_filtered_objects_PIL(
-    im,
-    obj_dets,
-    hand_dets,
-    thresh_hand=0.8,
-    thresh_obj=0.01,
-    font_path="lib/model/utils/times_b.ttf",
-):
-
-    # convert to PIL
-    im = im[:, :, ::-1]
-    image = Image.fromarray(im).convert("RGBA")
-    draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype(font_path, size=30)
-    width, height = image.size
-
-    if (obj_dets is not None) and (hand_dets is not None):
-        img_obj_id = filter_object(obj_dets, hand_dets)
-        for obj_idx, i in enumerate(range(np.minimum(10, obj_dets.shape[0]))):
-            bbox = list(int(np.round(x)) for x in obj_dets[i, :4])
-            score = obj_dets[i, 4]
-            if score > thresh_obj and i in img_obj_id:
-                # viz obj by PIL
-                image = draw_obj_mask(
-                    image, draw, obj_idx, bbox, score, width, height, font
-                )
-
-        for hand_idx, i in enumerate(range(np.minimum(10, hand_dets.shape[0]))):
-            bbox = list(int(np.round(x)) for x in hand_dets[i, :4])
-            score = hand_dets[i, 4]
-            lr = hand_dets[i, -1]
-            state = hand_dets[i, 5]
-            if score > thresh_hand:
-                # viz hand by PIL
-                image = draw_hand_mask(
-                    image, draw, hand_idx, bbox, score, lr, state, width, height, font
-                )
-
-                if state > 0:  # in contact hand
-
-                    obj_cc, hand_cc = calculate_center(
-                        obj_dets[img_obj_id[i], :4]
-                    ), calculate_center(bbox)
-                    # viz line by PIL
-                    if lr == 0:
-                        side_idx = 0
-                    elif lr == 1:
-                        side_idx = 1
-                    draw_line_point(
-                        draw,
-                        side_idx,
-                        (int(hand_cc[0]), int(hand_cc[1])),
-                        (int(obj_cc[0]), int(obj_cc[1])),
-                    )
-
-    elif hand_dets is not None:
-        image = vis_detections_PIL(im, "hand", hand_dets, thresh_hand, font_path)
-
-    return image
 
 
 if __name__ == "__main__":
@@ -415,25 +349,37 @@ if __name__ == "__main__":
             obj_dets, hand_dets = do_nms_and_visualize(
                 args, cfg, img, pred_boxes, scores, contact_indices, offset_vector, lr
             )
-            img_show = vis_detections_filtered_objects_PIL(
-                img, obj_dets, hand_dets, thresh_hand, thresh_obj
+            print(f"obj_dets: {obj_dets.shape}")
+            print(f"hand_dets: {hand_dets.shape}")
+            img_show_PIL = vis_detections_filtered_objects_PIL(
+                img, obj_dets, hand_dets, thresh_hand, thresh_obj=0.2
+            )
+            img_show_cv2 = vis_detections_filtered_objects(
+                img, obj_dets, hand_dets, thresh=0.5
             )
             nms_toc = time.time()
             nms_time = nms_toc - nms_tic
 
             ## Save
+            save_tic = time.time()
+            os.makedirs(args.save_dir, exist_ok=True)
+
+            result_path = os.path.join(
+                args.save_dir, imglist[img_idx][:-4] + "_det.png"
+            )
+            img_show_PIL.save(result_path)
+
+            result_path = os.path.join(
+                args.save_dir, imglist[img_idx][:-4] + "_det_cv2.png"
+            )
+            cv2.imwrite(result_path, img_show_cv2)
+            save_toc = time.time()
+            save_time = save_toc - save_tic
+
+            ## Profiling
             print(
-                "im_detect: {:d}/{:d} {:.3f}s {:.3f}s   \r".format(
-                    img_idx + 1, num_images, detect_time, nms_time
-                )
+                f"Detected image {img_idx + 1}/{num_images} in",
+                f"detect: {detect_time:.2f}s",
+                f"NMS: {nms_time:.2f}s",
+                f"save: {save_time:.2f}s",
             )
-            os.makedirs(args.save_dir, exist_ok=True)
-            result_path = os.path.join(
-                args.save_dir, imglist[img_idx][:-4] + "_det.png"
-            )
-            img_show.save(result_path)
-            os.makedirs(args.save_dir, exist_ok=True)
-            result_path = os.path.join(
-                args.save_dir, imglist[img_idx][:-4] + "_det.png"
-            )
-            img_show.save(result_path)
