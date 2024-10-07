@@ -20,7 +20,6 @@ matplotlib==3.3.4
 matplotlib-inline==0.1.7
 msgpack==1.1.0
 numpy==1.22.4
-opencv-python==4.10.0.84
 packaging==24.1
 parso==0.8.4
 pascal-voc-writer==0.1.4

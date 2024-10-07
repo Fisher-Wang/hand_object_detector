@@ -18,6 +18,7 @@ from model.utils.net_utils import (  # (1) here add a function to viz
     vis_detections_filtered_objects_PIL,
 )
 from torch import Tensor
+from utils import write_avc1_mp4
 
 pascal_classes = np.asarray(["__background__", "targetobject", "hand"])
 
@@ -272,67 +273,76 @@ def main(args: Args, cfg):
     fasterRCNN.to(device)
     fasterRCNN.eval()
 
-    print(f"Reading images from {args.image_dir}")
-    imglist = os.listdir(args.image_dir)
-    imglist = [img for img in imglist if img.endswith(".png") or img.endswith(".jpg")]
-    num_images = len(imglist)
-    print(f"Loaded {num_images} images")
+    print(f"Reading videos from {args.image_dir}")
+    videolist = [v for v in os.listdir(args.image_dir) if v.endswith(".mp4")]
+    num_videos = len(videolist)
+    print(f"Loaded {num_videos} videos")
 
-    for img_idx in range(num_images):
-        # Load the demo image
-        img = cv2.imread(os.path.join(args.image_dir, imglist[img_idx]))
-        im_data, im_info, im_scales = preprocess_image(img)
+    for video_idx, video_name in enumerate(videolist):
+        video_path = os.path.join(args.image_dir, video_name)
+        cap = cv2.VideoCapture(video_path)
 
-        ## Detect
-        det_tic = time.time()
-        pred_boxes, scores, contact_indices, offset_vector, lr = detect(
-            args, cfg, fasterRCNN, im_data, im_info, im_scales
-        )
-        print("scores.shape", scores.shape)  # (300, 3), 3 is the number of classes
-        print(
-            "pred_boxes.shape", pred_boxes.shape
-        )  # (300, 12=3*4), 4 is the length of bbox
-        det_toc = time.time()
-        detect_time = det_toc - det_tic
+        # Get video properties
+        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        ## NMS and visualize
-        nms_tic = time.time()
-        obj_dets, hand_dets = do_nms_and_visualize(
-            args, cfg, pred_boxes, scores, contact_indices, offset_vector, lr
-        )
-        print(f"obj_dets: {obj_dets.shape}")
-        print(f"hand_dets: {hand_dets.shape}")
-        img_show_PIL = vis_detections_filtered_objects_PIL(
-            img, obj_dets, hand_dets, args.thresh_hand, args.thresh_obj
-        )
-        img_show_cv2 = vis_detections_filtered_objects(
-            img, obj_dets, hand_dets, thresh=0.5
-        )
-        nms_toc = time.time()
-        nms_time = nms_toc - nms_tic
+        # Read all frames
+        frames = []
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frames.append(frame)
+        cap.release()
 
-        ## Save
-        save_tic = time.time()
+        print(f"Read {len(frames)} frames from video {video_name}")
+
+        # Prepare output video writer
         os.makedirs(args.save_dir, exist_ok=True)
 
-        result_path = os.path.join(args.save_dir, imglist[img_idx][:-4] + "_det.png")
-        img_show_PIL.save(result_path)
+        # Process frames
+        output_frames = []
+        for frame_idx, frame in enumerate(frames):
+            print(f"Processing frame {frame_idx + 1}/{len(frames)}")
+            print(f"Frame shape: {frame.shape}")
+            # Process frame
+            im_data, im_info, im_scales = preprocess_image(frame)
 
-        result_path = os.path.join(
-            args.save_dir, imglist[img_idx][:-4] + "_det_cv2.png"
-        )
-        cv2.imwrite(result_path, img_show_cv2)
-        save_toc = time.time()
-        save_time = save_toc - save_tic
+            # Detect
+            det_tic = time.time()
+            pred_boxes, scores, contact_indices, offset_vector, lr = detect(
+                args, cfg, fasterRCNN, im_data, im_info, im_scales
+            )
+            det_toc = time.time()
+            detect_time = det_toc - det_tic
 
-        ## Profiling
-        total_time = detect_time + nms_time + save_time
-        print(
-            f"Detected image {img_idx + 1}/{num_images} in {total_time:.2f}s, with",
-            f"Detect={detect_time:.2f}s",
-            f"NMS={nms_time:.2f}s",
-            f"Save={save_time:.2f}s",
-        )
+            # NMS and visualize
+            nms_tic = time.time()
+            obj_dets, hand_dets = do_nms_and_visualize(
+                args, cfg, pred_boxes, scores, contact_indices, offset_vector, lr
+            )
+            img_show_cv2 = vis_detections_filtered_objects(
+                frame, obj_dets, hand_dets, thresh=0.5
+            )
+            nms_toc = time.time()
+            nms_time = nms_toc - nms_tic
+
+            # Append frame to output frames
+            output_frames.append(img_show_cv2)
+
+            # Profiling
+            total_time = detect_time + nms_time
+            print(
+                f"Processed video {video_idx + 1}/{num_videos}, frame {frame_idx + 1}/{len(frames)} in {total_time:.2f}s, with",
+                f"Detect={detect_time:.2f}s",
+                f"NMS={nms_time:.2f}s",
+            )
+
+        # Release resources
+        output_path = os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4")
+        assert output_frames[0].dtype == np.uint8
+        write_avc1_mp4(output_frames, output_path)
 
 
 if __name__ == "__main__":

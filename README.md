@@ -1,4 +1,4 @@
-# Hand Object Detector 
+# Hand Object Detector
 This is the code for our paper *Understanding Human Hands in Contact at Internet Scale* (CVPR 2020, **Oral**).
 
 Dandan Shan, Jiaqi Geng*, Michelle Shu*, David F. Fouhey
@@ -21,6 +21,8 @@ Create a conda env
 ```
 conda create --name handobj python=3.10
 conda activate handobj
+mamba install -c conda-forge opencv
+mamba install numpy==1.22.4 scipy==1.7.3
 pip install -r requirements.txt
 pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
 ```
@@ -144,9 +146,9 @@ python setup.py build develop
 </tbody></table>
 
 
-The model **handobj_100K** is trained on trainset of **100K** youtube frames. 
+The model **handobj_100K** is trained on trainset of **100K** youtube frames.
 
-The model **handobj_100K+ego** is trained on trainset of **100K** plus additional **egocentric** data we annotated, which works much better on egocentric data. 
+The model **handobj_100K+ego** is trained on trainset of **100K** plus additional **egocentric** data we annotated, which works much better on egocentric data.
 
 We provide the frame names of the egocentric data we used here: [trainval.txt](https://github.com/ddshan/hand_object_detector/blob/master/assets/data_ego_framename/trainval.txt), [test.txt](https://github.com/ddshan/hand_object_detector/blob/master/assets/data_ego_framename/test.txt). This split is backwards compatible with
 the [Epic-Kitchens2018](https://epic-kitchens.github.io/2018) (EK), [EGTEA](http://cbs.ic.gatech.edu/fpv/), and [CharadesEgo](https://prior.allenai.org/projects/charades-ego) (CE).
@@ -155,7 +157,7 @@ the [Epic-Kitchens2018](https://epic-kitchens.github.io/2018) (EK), [EGTEA](http
 
 ## Train
 
-### Data preparation  
+### Data preparation
 Prepare and save pascal-voc format data in **data/** folder:
 ```
 mkdir data
@@ -187,7 +189,7 @@ data/
 
 To train a hand object detector model with resnet101 on pascal_voc format data, run:
 ```
-CUDA_VISIBLE_DEVICES=0 python trainval_net.py --model_name handobj_100K --log_name=handobj_100K --dataset pascal_voc --net res101 --bs 1 --nw 4 --lr 1e-3 --lr_decay_step 3 --cuda --epoch=10 --use_tfb 
+CUDA_VISIBLE_DEVICES=0 python trainval_net.py --model_name handobj_100K --log_name=handobj_100K --dataset pascal_voc --net res101 --bs 1 --nw 4 --lr 1e-3 --lr_decay_step 3 --cuda --epoch=10 --use_tfb
 ```
 
 
@@ -218,7 +220,7 @@ models
 
 
 
-**Simple testing**: 
+**Simple testing**:
 
 Put your images in the **images/** folder and run the command. A new folder **images_det** will be created with the visualization. Check more about argparse parameters in demo.py.
 ```
@@ -230,11 +232,11 @@ CUDA_VISIBLE_DEVICES=0 python demo.py --cuda --checkepoch=xxx --checkpoint=xxx
 * hand_dets: detected results for hands, [boxes(4), score(1), state(1), offset_vector(3), left/right(1)]
 * obj_dets: detected results for object, [boxes(4), score(1), <em>state(1), offset_vector(3), left/right(1)</em>]
 
-We did **not** train the contact_state, offset_vector and hand_side part for objects. We keep them just to make the data format consistent. So, only use the bbox and confidence score infomation for objects.  
+We did **not** train the contact_state, offset_vector and hand_side part for objects. We keep them just to make the data format consistent. So, only use the bbox and confidence score infomation for objects.
 
 **Matching**:
 
-Check the additional [matching.py](https://github.com/ddshan/Hand_Object_Detector/blob/master/lib/model/utils/matching.py) script to match the detection results, **hand_dets** and **obj_dets**, if needed.  
+Check the additional [matching.py](https://github.com/ddshan/Hand_Object_Detector/blob/master/lib/model/utils/matching.py) script to match the detection results, **hand_dets** and **obj_dets**, if needed.
 
 
 ### One Image Demo Output:
@@ -267,11 +269,11 @@ Label definitions:
 
 If this work is helpful in your research, please cite:
 ```
-@INPROCEEDINGS{Shan20, 
+@INPROCEEDINGS{Shan20,
     author = {Shan, Dandan and Geng, Jiaqi and Shu, Michelle  and Fouhey, David},
     title = {Understanding Human Hands in Contact at Internet Scale},
-    booktitle = CVPR, 
-    year = {2020} 
+    booktitle = CVPR,
+    year = {2020}
 }
 ```
 When you use the model trained on our ego data, make sure to also cite the original datasets ([Epic-Kitchens](https://epic-kitchens.github.io/2018), [EGTEA](http://cbs.ic.gatech.edu/fpv/) and [CharadesEgo](https://prior.allenai.org/projects/charades-ego)) that we collect from and agree to the original conditions for using that data.

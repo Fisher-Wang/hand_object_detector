@@ -26,7 +26,7 @@ predata_dandan/
 output/
 lib/datasets/compare_eval/
 backup/
-pick_2/ 
+pick_2/
 images/
 logs/
 
@@ -226,3 +226,7 @@ caffe2.egg-info
 # cython generated files
 lib/model/utils/bbox.c
 lib/pycocotools/_mask.c
+
+*.png
+*.jpg
+tmp/
