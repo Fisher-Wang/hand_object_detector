@@ -61,8 +61,6 @@ class Args:
     """whether use CUDA"""
     mGPUs: bool = False
     """whether use multiple GPUs"""
-    class_agnostic: bool = False
-    """whether perform class_agnostic bbox regression"""
     parallel_type: int = 0
     """which part of model to parallel, 0: all, 1: model before roi pooling"""
     checksession: int = 1
@@ -138,21 +136,13 @@ def load_model(args: Args, cfg):
 
     # initilize the network here.
     if args.net == "vgg16":
-        fasterRCNN = vgg16(
-            pascal_classes, pretrained=False, class_agnostic=args.class_agnostic
-        )
+        fasterRCNN = vgg16(pascal_classes, pretrained=False)
     elif args.net == "res101":
-        fasterRCNN = resnet(
-            pascal_classes, 101, pretrained=False, class_agnostic=args.class_agnostic
-        )
+        fasterRCNN = resnet(pascal_classes, 101, pretrained=False)
     elif args.net == "res50":
-        fasterRCNN = resnet(
-            pascal_classes, 50, pretrained=False, class_agnostic=args.class_agnostic
-        )
+        fasterRCNN = resnet(pascal_classes, 50, pretrained=False)
     elif args.net == "res152":
-        fasterRCNN = resnet(
-            pascal_classes, 152, pretrained=False, class_agnostic=args.class_agnostic
-        )
+        fasterRCNN = resnet(pascal_classes, 152, pretrained=False)
     else:
         print("network is not defined")
         breakpoint()
@@ -233,21 +223,10 @@ def detect(
         box_deltas = bbox_pred.data
         if cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED:
             # Optionally normalize targets by a precomputed mean and stdev
-            if args.class_agnostic:
-                box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
-                    cfg.TRAIN.BBOX_NORMALIZE_STDS
-                ).to(device) + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).to(
-                    device
-                )
-
-                box_deltas = box_deltas.view(1, -1, 4)
-            else:
-                box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
-                    cfg.TRAIN.BBOX_NORMALIZE_STDS
-                ).to(device) + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).to(
-                    device
-                )
-                box_deltas = box_deltas.view(1, -1, 4 * len(pascal_classes))
+            box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
+                cfg.TRAIN.BBOX_NORMALIZE_STDS
+            ).to(device) + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).to(device)
+            box_deltas = box_deltas.view(1, -1, 4 * len(pascal_classes))
 
         pred_boxes = bbox_transform_inv(boxes, box_deltas, 1)
         pred_boxes = clip_boxes(pred_boxes, im_info.data, 1)
@@ -278,10 +257,7 @@ def do_nms_and_visualize(
         if inds.numel() > 0:
             cls_scores = scores[:, j][inds]
             _, order = torch.sort(cls_scores, 0, True)
-            if args.class_agnostic:
-                cls_boxes = pred_boxes[inds, :]
-            else:
-                cls_boxes = pred_boxes[inds][:, j * 4 : (j + 1) * 4]
+            cls_boxes = pred_boxes[inds][:, j * 4 : (j + 1) * 4]
             keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
 
             cls_dets = torch.cat(
