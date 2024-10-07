@@ -194,18 +194,6 @@ if __name__ == "__main__":
     fasterRCNN.to(device)
     fasterRCNN.eval()
 
-    # initilize the tensor holder here.
-    im_data = torch.FloatTensor(1)
-    im_info = torch.FloatTensor(1)
-    num_boxes = torch.LongTensor(1)
-    gt_boxes = torch.FloatTensor(1)
-    box_info = torch.FloatTensor(1)
-
-    im_data = im_data.to(device)
-    im_info = im_info.to(device)
-    num_boxes = num_boxes.to(device)
-    gt_boxes = gt_boxes.to(device)
-
     with torch.no_grad():
         start = time.time()
         max_per_image = 100
@@ -237,16 +225,11 @@ if __name__ == "__main__":
                 [[im_blob.shape[1], im_blob.shape[2], im_scales[0]]], dtype=np.float32
             )
 
-            im_data_pt = torch.from_numpy(im_blob)
-            im_data_pt = im_data_pt.permute(0, 3, 1, 2)
-            im_info_pt = torch.from_numpy(im_info_np)
-
-            with torch.no_grad():
-                im_data.resize_(im_data_pt.size()).copy_(im_data_pt)
-                im_info.resize_(im_info_pt.size()).copy_(im_info_pt)
-                gt_boxes.resize_(1, 1, 5).zero_()
-                num_boxes.resize_(1).zero_()
-                box_info.resize_(1, 1, 5).zero_()
+            im_data = torch.from_numpy(im_blob).permute(0, 3, 1, 2).to(device)
+            im_info = torch.from_numpy(im_info_np).to(device)
+            gt_boxes = torch.zeros((1, 1, 5)).to(device)
+            num_boxes = torch.zeros(1).to(device)
+            box_info = torch.zeros((1, 1, 5)).to(device)
 
             # pdb.set_trace()
             det_tic = time.time()
@@ -355,6 +338,11 @@ if __name__ == "__main__":
                     if pascal_classes[j] == "hand":
                         hand_dets = cls_dets.cpu().numpy()
 
+            # breakpoint()
+            # obj_dets: (1, 10)
+            # hand_dets: (2, 10)
+            # thresh_hand = 0.5
+            # thresh_obj = 0.5
             im2show = vis_detections_filtered_objects_PIL(
                 im2show, obj_dets, hand_dets, thresh_hand, thresh_obj
             )
