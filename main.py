@@ -120,7 +120,7 @@ def _get_image_blob(im):
     return blob, np.array(im_scale_factors)
 
 
-def load_model(args, cfg):
+def load_model(args: Args, cfg):
     # load model
     model_dir = args.load_dir + "/" + args.net + "_handobj_100K" + "/" + args.dataset
     if not os.path.exists(model_dir):
@@ -172,6 +172,129 @@ def load_model(args, cfg):
     return fasterRCNN
 
 
+def detect(
+    args: Args,
+    cfg,
+    fasterRCNN,
+    im_data,
+    im_info,
+    gt_boxes,
+    num_boxes,
+    box_info,
+    im_scales,
+):
+    (
+        rois,
+        cls_prob,
+        bbox_pred,
+        rpn_loss_cls,
+        rpn_loss_box,
+        RCNN_loss_cls,
+        RCNN_loss_bbox,
+        rois_label,
+        loss_list,
+    ) = fasterRCNN(im_data, im_info, gt_boxes, num_boxes, box_info)
+
+    scores = cls_prob.data
+    boxes = rois.data[:, :, 1:5]
+
+    # extact predicted params
+    contact_vector = loss_list[0][0]  # hand contact state info
+    offset_vector = loss_list[1][
+        0
+    ].detach()  # offset vector (factored into a unit vector and a magnitude)
+    lr_vector = loss_list[2][0].detach()  # hand side info (left/right)
+
+    # get hand contact
+    _, contact_indices = torch.max(contact_vector, 2)
+    contact_indices = contact_indices.squeeze(0).unsqueeze(-1).float()
+
+    # get hand side
+    lr = torch.sigmoid(lr_vector) > 0.5
+    lr = lr.squeeze(0).float()
+
+    if cfg.TEST.BBOX_REG:
+        # Apply bounding-box regression deltas
+        box_deltas = bbox_pred.data
+        if cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED:
+            # Optionally normalize targets by a precomputed mean and stdev
+            if args.class_agnostic:
+                box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
+                    cfg.TRAIN.BBOX_NORMALIZE_STDS
+                ).to(device) + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).to(
+                    device
+                )
+
+                box_deltas = box_deltas.view(1, -1, 4)
+            else:
+                box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
+                    cfg.TRAIN.BBOX_NORMALIZE_STDS
+                ).to(device) + torch.FloatTensor(cfg.TRAIN.BBOX_NORMALIZE_MEANS).to(
+                    device
+                )
+                box_deltas = box_deltas.view(1, -1, 4 * len(pascal_classes))
+
+        pred_boxes = bbox_transform_inv(boxes, box_deltas, 1)
+        pred_boxes = clip_boxes(pred_boxes, im_info.data, 1)
+    else:
+        # Simply repeat the boxes, once for each class
+        pred_boxes = np.tile(boxes, (1, scores.shape[1]))
+
+    pred_boxes /= im_scales[0]
+
+    pred_boxes = pred_boxes.squeeze()  # (300, 12)
+    scores = scores.squeeze()  # (300, 3)
+    return pred_boxes, scores, contact_indices, offset_vector, lr
+
+
+def misc(args: Args, cfg, im, pred_boxes, scores, contact_indices, offset_vector, lr):
+    im2show = np.copy(im)
+    obj_dets, hand_dets = None, None
+    for j in range(1, len(pascal_classes)):
+        # inds = torch.nonzero(scores[:,j] > thresh).view(-1)
+        if pascal_classes[j] == "hand":
+            inds = torch.nonzero(scores[:, j] > thresh_hand).view(-1)
+        elif pascal_classes[j] == "targetobject":
+            inds = torch.nonzero(scores[:, j] > thresh_obj).view(-1)
+
+        # if there is det
+        if inds.numel() > 0:
+            cls_scores = scores[:, j][inds]
+            _, order = torch.sort(cls_scores, 0, True)
+            if args.class_agnostic:
+                cls_boxes = pred_boxes[inds, :]
+            else:
+                cls_boxes = pred_boxes[inds][:, j * 4 : (j + 1) * 4]
+
+            cls_dets = torch.cat(
+                (
+                    cls_boxes,
+                    cls_scores.unsqueeze(1),
+                    contact_indices[inds],
+                    offset_vector.squeeze(0)[inds],
+                    lr[inds],
+                ),
+                1,
+            )
+            cls_dets = cls_dets[order]
+            keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
+            cls_dets = cls_dets[keep.view(-1).long()]
+            if pascal_classes[j] == "targetobject":
+                obj_dets = cls_dets.cpu().numpy()
+            if pascal_classes[j] == "hand":
+                hand_dets = cls_dets.cpu().numpy()
+
+    # breakpoint()
+    # obj_dets: (1, 10)
+    # hand_dets: (2, 10)
+    # thresh_hand = 0.5
+    # thresh_obj = 0.5
+    im2show = vis_detections_filtered_objects_PIL(
+        im2show, obj_dets, hand_dets, thresh_hand, thresh_obj
+    )
+    return im2show
+
+
 if __name__ == "__main__":
     lr = cfg.TRAIN.LEARNING_RATE
     momentum = cfg.TRAIN.MOMENTUM
@@ -211,8 +334,6 @@ if __name__ == "__main__":
         print("Loaded Photo: {} images.".format(num_images))
 
         for img_idx in range(num_images):
-            total_tic = time.time()
-
             # Load the demo image
             im_file = os.path.join(args.image_dir, imglist[img_idx])
             im_in = cv2.imread(im_file)
@@ -231,131 +352,40 @@ if __name__ == "__main__":
             num_boxes = torch.zeros(1).to(device)
             box_info = torch.zeros((1, 1, 5)).to(device)
 
-            # pdb.set_trace()
+            ## Detect
             det_tic = time.time()
-
-            (
-                rois,
-                cls_prob,
-                bbox_pred,
-                rpn_loss_cls,
-                rpn_loss_box,
-                RCNN_loss_cls,
-                RCNN_loss_bbox,
-                rois_label,
-                loss_list,
-            ) = fasterRCNN(im_data, im_info, gt_boxes, num_boxes, box_info)
-
-            scores = cls_prob.data
-            boxes = rois.data[:, :, 1:5]
-
-            # extact predicted params
-            contact_vector = loss_list[0][0]  # hand contact state info
-            offset_vector = loss_list[1][
-                0
-            ].detach()  # offset vector (factored into a unit vector and a magnitude)
-            lr_vector = loss_list[2][0].detach()  # hand side info (left/right)
-
-            # get hand contact
-            _, contact_indices = torch.max(contact_vector, 2)
-            contact_indices = contact_indices.squeeze(0).unsqueeze(-1).float()
-
-            # get hand side
-            lr = torch.sigmoid(lr_vector) > 0.5
-            lr = lr.squeeze(0).float()
-
-            if cfg.TEST.BBOX_REG:
-                # Apply bounding-box regression deltas
-                box_deltas = bbox_pred.data
-                if cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED:
-                    # Optionally normalize targets by a precomputed mean and stdev
-                    if args.class_agnostic:
-                        box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
-                            cfg.TRAIN.BBOX_NORMALIZE_STDS
-                        ).to(device) + torch.FloatTensor(
-                            cfg.TRAIN.BBOX_NORMALIZE_MEANS
-                        ).to(
-                            device
-                        )
-
-                        box_deltas = box_deltas.view(1, -1, 4)
-                    else:
-                        box_deltas = box_deltas.view(-1, 4) * torch.FloatTensor(
-                            cfg.TRAIN.BBOX_NORMALIZE_STDS
-                        ).to(device) + torch.FloatTensor(
-                            cfg.TRAIN.BBOX_NORMALIZE_MEANS
-                        ).to(
-                            device
-                        )
-                        box_deltas = box_deltas.view(1, -1, 4 * len(pascal_classes))
-
-                pred_boxes = bbox_transform_inv(boxes, box_deltas, 1)
-                pred_boxes = clip_boxes(pred_boxes, im_info.data, 1)
-            else:
-                # Simply repeat the boxes, once for each class
-                pred_boxes = np.tile(boxes, (1, scores.shape[1]))
-
-            pred_boxes /= im_scales[0]
-
-            scores = scores.squeeze()
-            pred_boxes = pred_boxes.squeeze()
+            pred_boxes, scores, contact_indices, offset_vector, lr = detect(
+                args,
+                cfg,
+                fasterRCNN,
+                im_data,
+                im_info,
+                gt_boxes,
+                num_boxes,
+                box_info,
+                im_scales,
+            )
+            print("scores.shape", scores.shape)  # (300, 3), 3 is the number of classes
+            print(
+                "pred_boxes.shape", pred_boxes.shape
+            )  # (300, 12=3*4), 4 is the length of bbox
             det_toc = time.time()
             detect_time = det_toc - det_tic
+
+            ## Misc
             misc_tic = time.time()
-            im2show = np.copy(im)
-            obj_dets, hand_dets = None, None
-            for j in range(1, len(pascal_classes)):
-                # inds = torch.nonzero(scores[:,j] > thresh).view(-1)
-                if pascal_classes[j] == "hand":
-                    inds = torch.nonzero(scores[:, j] > thresh_hand).view(-1)
-                elif pascal_classes[j] == "targetobject":
-                    inds = torch.nonzero(scores[:, j] > thresh_obj).view(-1)
-
-                # if there is det
-                if inds.numel() > 0:
-                    cls_scores = scores[:, j][inds]
-                    _, order = torch.sort(cls_scores, 0, True)
-                    if args.class_agnostic:
-                        cls_boxes = pred_boxes[inds, :]
-                    else:
-                        cls_boxes = pred_boxes[inds][:, j * 4 : (j + 1) * 4]
-
-                    cls_dets = torch.cat(
-                        (
-                            cls_boxes,
-                            cls_scores.unsqueeze(1),
-                            contact_indices[inds],
-                            offset_vector.squeeze(0)[inds],
-                            lr[inds],
-                        ),
-                        1,
-                    )
-                    cls_dets = cls_dets[order]
-                    keep = nms(cls_boxes[order, :], cls_scores[order], cfg.TEST.NMS)
-                    cls_dets = cls_dets[keep.view(-1).long()]
-                    if pascal_classes[j] == "targetobject":
-                        obj_dets = cls_dets.cpu().numpy()
-                    if pascal_classes[j] == "hand":
-                        hand_dets = cls_dets.cpu().numpy()
-
-            # breakpoint()
-            # obj_dets: (1, 10)
-            # hand_dets: (2, 10)
-            # thresh_hand = 0.5
-            # thresh_obj = 0.5
-            im2show = vis_detections_filtered_objects_PIL(
-                im2show, obj_dets, hand_dets, thresh_hand, thresh_obj
+            im2show = misc(
+                args, cfg, im, pred_boxes, scores, contact_indices, offset_vector, lr
             )
-
             misc_toc = time.time()
             nms_time = misc_toc - misc_tic
 
+            ## Save
             print(
                 "im_detect: {:d}/{:d} {:.3f}s {:.3f}s   \r".format(
                     img_idx + 1, num_images, detect_time, nms_time
                 )
             )
-
             os.makedirs(args.save_dir, exist_ok=True)
             result_path = os.path.join(
                 args.save_dir, imglist[img_idx][:-4] + "_det.png"
