@@ -19,6 +19,7 @@ from model.utils.net_utils import (  # (1) here add a function to viz
     vis_detections_filtered_objects_PIL,
 )
 from torch import Tensor
+from tqdm import tqdm
 from utils import read_media, write_media, write_pickle
 
 log = logging.getLogger(__name__)
@@ -286,18 +287,18 @@ def main(args: Args, cfg):
     num_videos = len(media_list)
     print(f"Loaded {num_videos} images and videos")
 
-    for video_idx, video_name in enumerate(media_list):
+    for video_idx, video_name in tqdm(list(enumerate(media_list))):
         video_path = os.path.join(args.image_dir, video_name)
         frames = read_media(video_path, bgr2rgb=False)
 
-        print(f"Read {len(frames)} frames from {video_name}")
+        tqdm.write(f"Read {len(frames)} frames from {video_name}")
 
         # Process frames
         frames = frames[:5]
         output_frames = []
         output_results = []
         for frame_idx, frame in enumerate(frames):
-            print(f"Processing frame {frame_idx + 1}/{len(frames)}")
+            tqdm.write(f"Processing frame {frame_idx + 1}/{len(frames)}")
             # Process frame
             im_data, im_info, im_scales = preprocess_image(frame)
 
@@ -331,10 +332,14 @@ def main(args: Args, cfg):
 
             # Profiling
             total_time = detect_time + nms_time
-            print(
-                f"Processed media {video_idx + 1}/{num_videos}, frame {frame_idx + 1}/{len(frames)} in {total_time:.2f}s, with",
-                f"Detect={detect_time:.2f}s",
-                f"NMS={nms_time:.2f}s",
+            tqdm.write(
+                " ".join(
+                    [
+                        f"Processed media {video_idx + 1}/{num_videos}, frame {frame_idx + 1}/{len(frames)} in {total_time:.2f}s, with",
+                        f"Detect={detect_time:.2f}s",
+                        f"NMS={nms_time:.2f}s",
+                    ]
+                )
             )
 
         # Save results
