@@ -1,8 +1,28 @@
+import logging
 import pickle
 from typing import Sequence
 
 import cv2
 import numpy as np
+from rich.logging import RichHandler
+
+
+def set_logging_level(level: str):
+    levels = {
+        "critical": logging.CRITICAL,
+        "error": logging.ERROR,
+        "warn": logging.WARNING,
+        "warning": logging.WARNING,
+        "info": logging.INFO,
+        "debug": logging.DEBUG,
+    }
+    assert level in levels
+    logging.basicConfig(
+        level=levels[level],
+        format="%(message)s",
+        datefmt="%X",
+        handlers=[RichHandler()],
+    )
 
 
 def read_media(path: str) -> Sequence[np.ndarray]:

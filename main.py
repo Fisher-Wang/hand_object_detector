@@ -19,11 +19,10 @@ from model.utils.net_utils import (  # (1) here add a function to viz
     vis_detections_filtered_objects_PIL,
 )
 from torch import Tensor
-from tqdm import tqdm
-from utils import AVC1MP4Writer, read_media, write_pickle
+from tqdm.rich import tqdm_rich as tqdm
+from utils import AVC1MP4Writer, read_media, set_logging_level, write_pickle
 
-log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log = logging.getLogger()
 
 pascal_classes = np.asarray(["__background__", "targetobject", "hand"])
 
@@ -62,6 +61,8 @@ class Args:
     """hand threshold"""
     thresh_obj: float = 0.5
     """object threshold"""
+    log_level: str = "info"
+    """log level"""
 
 
 def _get_image_blob(im):
@@ -127,7 +128,6 @@ def load_model(args: Args, cfg) -> nn.Module:
 
     fasterRCNN.create_architecture()
 
-    print("load checkpoint %s" % (load_name))
     if args.cuda > 0:
         checkpoint = torch.load(load_name)
     else:
@@ -136,7 +136,7 @@ def load_model(args: Args, cfg) -> nn.Module:
     if "pooling_mode" in checkpoint.keys():
         cfg.POOLING_MODE = checkpoint["pooling_mode"]
 
-    print("load model successfully!")
+    log.info(f"load checkpoint {load_name} successfully!")
     return fasterRCNN
 
 
@@ -182,7 +182,7 @@ def detect(
         ) = fasterRCNN(im_data, im_info, gt_boxes, num_boxes, box_info)
     toc = time.time()
     forward_time = toc - tic
-    log.debug(f"Forward pass took {forward_time:.2f}s")
+    log.debug(f"Forward pass took {forward_time:.3f}s")
 
     ## Postprocessing predicted results
     scores = cls_prob.data
@@ -278,16 +278,16 @@ def main(args: Args, cfg):
     fasterRCNN.to(device)
     fasterRCNN.eval()
 
-    print(f"Reading videos from {args.image_dir}")
+    log.info(f"Reading videos from {args.image_dir}")
     media_list = [
         v
         for v in os.listdir(args.image_dir)
         if v.endswith(".mp4") or v.endswith(".png")
     ]
     num_videos = len(media_list)
-    print(f"Loaded {num_videos} images and videos")
+    log.info(f"Loaded {num_videos} images and videos")
 
-    for video_idx, video_name in tqdm(list(enumerate(media_list))):
+    for video_idx, video_name in (pbar := tqdm(list(enumerate(media_list)))):
         video_path = os.path.join(args.image_dir, video_name)
         frames = read_media(video_path)
         os.makedirs(args.save_dir, exist_ok=True)
@@ -295,15 +295,14 @@ def main(args: Args, cfg):
             os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4")
         )
 
-        tqdm.write(f"Read {len(frames)} frames from {video_name}")
+        log.info(f"Read {len(frames)} frames from {video_name}")
 
         # Process frames
         output_results = []
         for frame_idx, frame in enumerate(frames):
             # if frame_idx >= 5:
             #     break
-            tqdm.write(f"Processing frame {frame_idx + 1}/{len(frames)}")
-            # Process frame
+            # Preprocess
             im_data, im_info, im_scales = preprocess_image(frame)
 
             # Detect
@@ -336,10 +335,10 @@ def main(args: Args, cfg):
 
             # Profiling
             total_time = detect_time + nms_time
-            tqdm.write(
+            pbar.set_description(
                 " ".join(
                     [
-                        f"Processed media {video_idx + 1}/{num_videos}, frame {frame_idx + 1}/{len(frames)} in {total_time:.2f}s, with",
+                        f"Processed media {video_idx + 1}/{num_videos}, frame {frame_idx + 1}/{len(frames)} in {total_time:.2f}s:",
                         f"Detect={detect_time:.2f}s",
                         f"NMS={nms_time:.2f}s",
                     ]
@@ -369,4 +368,5 @@ if __name__ == "__main__":
     cfg.USE_GPU_NMS = args.cuda
 
     device = torch.device("cuda" if args.cuda else "cpu")
+    set_logging_level(args.log_level)
     main(args, cfg)
