@@ -27,7 +27,7 @@ from .voc_eval import voc_eval, voc_eval_hand
 
 # TODO: make fast_rcnn irrelevant
 # >>>> obsolete, because it depends on sth outside of this project
-from model.utils.config import cfg
+from faster_rcnn.model.utils.config import cfg
 
 try:
     xrange          # Python 2

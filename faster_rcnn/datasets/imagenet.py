@@ -6,10 +6,9 @@ from __future__ import print_function
 # Written by Ross Girshick
 # --------------------------------------------------------
 
-import datasets
-import datasets.imagenet
+from faster_rcnn import datasets
 import os, sys
-from datasets.imdb import imdb
+from faster_rcnn.datasets.imdb import imdb
 import xml.dom.minidom as minidom
 import numpy as np
 import scipy.sparse

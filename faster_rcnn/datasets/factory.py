@@ -11,10 +11,10 @@ from __future__ import division
 from __future__ import print_function
 
 __sets = {}
-from datasets.pascal_voc import pascal_voc
+from faster_rcnn.datasets.pascal_voc import pascal_voc
 # from datasets.coco import coco
-from datasets.imagenet import imagenet
-from datasets.vg import vg
+from faster_rcnn.datasets.imagenet import imagenet
+from faster_rcnn.datasets.vg import vg
 
 import numpy as np
 

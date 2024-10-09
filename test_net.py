@@ -19,16 +19,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import pickle
-from roi_data_layer.roidb import combined_roidb
-from roi_data_layer.roibatchLoader import roibatchLoader
-from model.utils.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
-from model.rpn.bbox_transform import clip_boxes
+from faster_rcnn.roi_data_layer.roidb import combined_roidb
+from faster_rcnn.roi_data_layer.roibatchLoader import roibatchLoader
+from faster_rcnn.model.utils.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
+from faster_rcnn.model.rpn.bbox_transform import clip_boxes
 # from model.nms.nms_wrapper import nms
-from model.roi_layers import nms
-from model.rpn.bbox_transform import bbox_transform_inv
-from model.utils.net_utils import save_net, load_net, vis_detections, vis_detections_filtered_objects_PIL
-from model.faster_rcnn.vgg16 import vgg16
-from model.faster_rcnn.resnet import resnet
+from faster_rcnn.model.roi_layers import nms
+from faster_rcnn.model.rpn.bbox_transform import bbox_transform_inv
+from faster_rcnn.model.utils.net_utils import save_net, load_net, vis_detections, vis_detections_filtered_objects_PIL
+from faster_rcnn.model.faster_rcnn.vgg16 import vgg16
+from faster_rcnn.model.faster_rcnn.resnet import resnet
 
 try:
     xrange          # Python 2

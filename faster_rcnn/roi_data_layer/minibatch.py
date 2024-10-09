@@ -14,8 +14,8 @@ import cv2
 import numpy as np
 import numpy.random as npr
 # from scipy.misc import imread
-from model.utils.config import cfg
-from model.utils.blob import prep_im_for_blob, im_list_to_blob
+from faster_rcnn.model.utils.config import cfg
+from faster_rcnn.model.utils.blob import prep_im_for_blob, im_list_to_blob
 import pdb
 def get_minibatch(roidb, num_classes):
   """Given a roidb, construct a minibatch sampled from it."""

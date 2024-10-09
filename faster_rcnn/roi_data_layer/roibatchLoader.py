@@ -10,9 +10,9 @@ import torch.utils.data as data
 from PIL import Image
 import torch
 
-from model.utils.config import cfg
-from roi_data_layer.minibatch import get_minibatch
-from model.rpn.bbox_transform import bbox_transform_inv, clip_boxes
+from faster_rcnn.model.utils.config import cfg
+from faster_rcnn.roi_data_layer.minibatch import get_minibatch
+from faster_rcnn.model.rpn.bbox_transform import bbox_transform_inv, clip_boxes
 
 import numpy as np
 import random
