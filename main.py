@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -66,6 +67,8 @@ class Args:
     """log level"""
     sample_intv: int = 1
     """sample interval"""
+    max_out_frames: int = math.inf
+    """maximum number of frames to process"""
     overwrite: bool = False
     """overwrite existing results"""
 
@@ -304,7 +307,11 @@ def main(args: Args, cfg):
             fps=30 / args.sample_intv,
         )
 
-        frames = read_media(src_video_path, sample_intv=args.sample_intv)
+        frames = read_media(
+            src_video_path,
+            sample_intv=args.sample_intv,
+            max_out_frames=args.max_out_frames,
+        )
         log.info(
             f"Read {len(frames)} frames from {video_name} with sample interval {args.sample_intv}"
         )

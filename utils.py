@@ -26,32 +26,38 @@ def set_logging_level(level: str):
     )
 
 
-def read_media(path: str, sample_intv: int = 1) -> Sequence[np.ndarray]:
+def read_media(
+    path: str, sample_intv: int = 1, max_out_frames: int = math.inf
+) -> Sequence[np.ndarray]:
     if path.endswith(".png"):
         frames = [read_png(path)]
     elif path.endswith(".mp4"):
-        frames = MP4Reader(path, sample_intv)
+        frames = MP4Reader(path, sample_intv, max_out_frames)
     else:
         raise ValueError(f"Unsupported file type: {path}")
     return frames
 
 
 class MP4Reader:
-    def __init__(self, path: str, sample_intv: int = 1, max_frames: int = math.inf):
+    def __init__(self, path: str, sample_intv: int = 1, max_out_frames: int = math.inf):
         self.cap = cv2.VideoCapture(path)
-        self.num_frames = min(max_frames, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+        self.num_out_frames = min(
+            max_out_frames, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        )
         self.sample_intv = sample_intv
-        self.count = 0
+        self.seek = 0
+        self.count_frames = 0
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self.cap.isOpened() and self.count < self.num_frames:
+        if self.cap.isOpened() and self.count_frames < self.num_out_frames:
             ret, frame = self.cap.read()
             if ret:
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.count)
-                self.count += self.sample_intv
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.seek)
+                self.seek += self.sample_intv
+                self.count_frames += 1
                 return frame
             else:
                 self.cap.release()
@@ -60,7 +66,7 @@ class MP4Reader:
             raise StopIteration
 
     def __len__(self):
-        return self.num_frames // self.sample_intv
+        return self.num_out_frames
 
 
 def read_png(path: str) -> np.ndarray:
