@@ -20,6 +20,7 @@ from model.utils.net_utils import (  # (1) here add a function to viz
 )
 from torch import Tensor
 from tqdm.rich import tqdm_rich as tqdm
+
 from utils import AVC1MP4Writer, read_media, set_logging_level, write_pickle
 
 log = logging.getLogger()
@@ -63,6 +64,8 @@ class Args:
     """object threshold"""
     log_level: str = "info"
     """log level"""
+    sample_intv: int = 1
+    """sample interval"""
 
 
 def _get_image_blob(im):
@@ -289,13 +292,16 @@ def main(args: Args, cfg):
 
     for video_idx, video_name in (pbar := tqdm(list(enumerate(media_list)))):
         video_path = os.path.join(args.image_dir, video_name)
-        frames = read_media(video_path)
+        frames = read_media(video_path, sample_intv=args.sample_intv)
         os.makedirs(args.save_dir, exist_ok=True)
         writer = AVC1MP4Writer(
-            os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4")
+            os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4"),
+            fps=30 / args.sample_intv,
         )
 
-        log.info(f"Read {len(frames)} frames from {video_name}")
+        log.info(
+            f"Read {len(frames)} frames from {video_name} with sample interval {args.sample_intv}"
+        )
 
         # Process frames
         output_results = []

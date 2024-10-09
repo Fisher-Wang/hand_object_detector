@@ -1,4 +1,5 @@
 import logging
+import math
 import pickle
 from typing import Sequence
 
@@ -25,28 +26,32 @@ def set_logging_level(level: str):
     )
 
 
-def read_media(path: str) -> Sequence[np.ndarray]:
+def read_media(path: str, sample_intv: int = 1) -> Sequence[np.ndarray]:
     if path.endswith(".png"):
         frames = [read_png(path)]
     elif path.endswith(".mp4"):
-        frames = read_mp4(path)
+        frames = MP4Reader(path, sample_intv)
     else:
         raise ValueError(f"Unsupported file type: {path}")
     return frames
 
 
 class MP4Reader:
-    def __init__(self, path: str):
+    def __init__(self, path: str, sample_intv: int = 1, max_frames: int = math.inf):
         self.cap = cv2.VideoCapture(path)
-        self.frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.num_frames = min(max_frames, int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+        self.sample_intv = sample_intv
+        self.count = 0
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self.cap.isOpened():
+        if self.cap.isOpened() and self.count < self.num_frames:
             ret, frame = self.cap.read()
             if ret:
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.count)
+                self.count += self.sample_intv
                 return frame
             else:
                 self.cap.release()
@@ -55,11 +60,7 @@ class MP4Reader:
             raise StopIteration
 
     def __len__(self):
-        return self.frame_count
-
-
-def read_mp4(path: str):
-    return MP4Reader(path)
+        return self.num_frames // self.sample_intv
 
 
 def read_png(path: str) -> np.ndarray:
@@ -114,7 +115,7 @@ def write_avc1_mp4(frames: list[np.ndarray], save_path: str, fps: int = 30):
 
 
 class AVC1MP4Writer:
-    def __init__(self, save_path: str, fps: int = 30, bgr2rgb: bool = True):
+    def __init__(self, save_path: str, fps: float = 30, bgr2rgb: bool = True):
         assert save_path.endswith(".mp4")
         self.save_path = save_path
         self.fps = fps
