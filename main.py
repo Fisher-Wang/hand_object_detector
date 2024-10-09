@@ -330,34 +330,42 @@ def main(args: Args, cfg):
             det_toc = time.time()
             detect_time = det_toc - det_tic
 
-            # NMS and visualize
+            # NMS
             nms_tic = time.time()
             obj_dets, hand_dets = do_NMS(
                 args, cfg, pred_boxes, scores, contact_indices, offset_vector, lr
             )
-            # img_show_cv2 = vis_detections_filtered_objects(
-            #     frame, obj_dets, hand_dets, thresh=0.5
-            # )
-            img_show = vis_detections_filtered_objects_PIL(
-                frame, obj_dets, hand_dets, args.thresh_hand, args.thresh_obj
-            )
-            img_show = np.array(img_show)
-            img_show = img_show[..., :3]
             nms_toc = time.time()
             nms_time = nms_toc - nms_tic
+            
+            # Visualize
+            vis_tic = time.time()
+            # Choice 1: use cv2 to visualize, very fast
+            img_show = vis_detections_filtered_objects(
+                frame, obj_dets, hand_dets, thresh=0.5
+            )
+            # Choice 2: use PIL to visualize, slow (30FPS -> 15FPS)
+            # img_show = vis_detections_filtered_objects_PIL(
+            #     frame, obj_dets, hand_dets, args.thresh_hand, args.thresh_obj
+            # )
+            img_show = np.array(img_show)
+            img_show = img_show[..., :3]
+            vis_toc = time.time()
+            vis_time = vis_toc - vis_tic
 
             # Append to output
             writer.write(img_show)
             output_results.append({"obj_dets": obj_dets, "hand_dets": hand_dets})
 
             # Profiling
-            total_time = detect_time + nms_time
+            total_time = detect_time + nms_time + vis_time
             pbar.set_description(
                 " ".join(
                     [
-                        f"Processed media {video_idx + 1}/{num_videos}, frame {frame_idx + 1}/{len(frames)} in {total_time:.2f}s:",
-                        f"Detect={detect_time:.2f}s",
-                        f"NMS={nms_time:.2f}s",
+                        f"Processed {video_idx + 1}/{num_videos}, frame {frame_idx + 1}/{len(frames)} in {total_time:.2f}s:",
+                        f"Det={detect_time:.2f}s",
+                        f"NMS={nms_time:.3f}s",
+                        f"Vis={vis_time:.3f}s",
                     ]
                 )
             )
