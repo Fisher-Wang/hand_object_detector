@@ -66,6 +66,8 @@ class Args:
     """log level"""
     sample_intv: int = 1
     """sample interval"""
+    overwrite: bool = False
+    """overwrite existing results"""
 
 
 def _get_image_blob(im):
@@ -291,14 +293,18 @@ def main(args: Args, cfg):
     log.info(f"Loaded {num_videos} images and videos")
 
     for video_idx, video_name in (pbar := tqdm(list(enumerate(media_list)))):
-        video_path = os.path.join(args.image_dir, video_name)
-        frames = read_media(video_path, sample_intv=args.sample_intv)
+        src_video_path = os.path.join(args.image_dir, video_name)
+        save_video_path = os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4")
+        if os.path.exists(save_video_path) and not args.overwrite:
+            log.info(f"Skipping {video_name}")
+            continue
         os.makedirs(args.save_dir, exist_ok=True)
         writer = AVC1MP4Writer(
-            os.path.join(args.save_dir, f"{video_name[:-4]}_det.mp4"),
+            save_video_path,
             fps=30 / args.sample_intv,
         )
 
+        frames = read_media(src_video_path, sample_intv=args.sample_intv)
         log.info(
             f"Read {len(frames)} frames from {video_name} with sample interval {args.sample_intv}"
         )
