@@ -19,17 +19,16 @@ More information can be found at our:
 ## Prerequisites
 Create a conda env
 ```
-conda create --name handobj python=3.10
-conda activate handobj
+mamba create --name handobj python=3.10
+mamba activate handobj
 mamba install -c conda-forge opencv
 mamba install numpy==1.22.4 scipy==1.7.3
 pip install -r requirements.txt
 pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
 ```
 
-Compile the cuda dependencies using following simple commands:
+Compile the cuda dependencies using following simple commands. Make sure switch to cuda 11 (preferably 11.3) before running this
 ```
-cd lib
 python setup.py build develop
 ```
 
