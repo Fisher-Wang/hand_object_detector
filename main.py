@@ -57,8 +57,6 @@ class Args:
     """checkepoch to load network"""
     checkpoint: int = 132028
     """checkpoint to load network"""
-    batch_size: int = 1
-    """batch_size"""
     thresh_hand: float = 0.5
     """hand threshold"""
     thresh_obj: float = 0.5

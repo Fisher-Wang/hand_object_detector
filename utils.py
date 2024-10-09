@@ -1,7 +1,8 @@
 import logging
 import math
 import pickle
-from typing import Sequence
+from itertools import islice
+from typing import Iterable, Sequence
 
 import cv2
 import numpy as np
@@ -155,3 +156,9 @@ class AVC1MP4Writer:
 def write_pickle(data, save_path: str):
     with open(save_path, "wb") as f:
         pickle.dump(data, f)
+
+
+def batcher(iterable: Iterable, batch_size: int):
+    iterator = iter(iterable)
+    while batch := list(islice(iterator, batch_size)):
+        yield batch
