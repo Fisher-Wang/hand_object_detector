@@ -10,12 +10,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import tyro
-from model.faster_rcnn.resnet import resnet
-from model.roi_layers import nms
-from model.rpn.bbox_transform import bbox_transform_inv, clip_boxes
-from model.utils.blob import im_list_to_blob
-from model.utils.config import cfg, cfg_from_file, cfg_from_list
-from model.utils.net_utils import (  # (1) here add a function to viz
+from faster_rcnn.model.faster_rcnn.resnet import resnet
+from faster_rcnn.model.roi_layers import nms
+from faster_rcnn.model.rpn.bbox_transform import bbox_transform_inv, clip_boxes
+from faster_rcnn.model.utils.blob import im_list_to_blob
+from faster_rcnn.model.utils.config import cfg, cfg_from_file, cfg_from_list
+from faster_rcnn.model.utils.net_utils import (  # (1) here add a function to viz
     vis_detections_filtered_objects,
     vis_detections_filtered_objects_PIL,
 )

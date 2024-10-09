@@ -14,9 +14,9 @@ import torch.nn as nn
 import numpy as np
 import numpy.random as npr
 
-from model.utils.config import cfg
-from .generate_anchors import generate_anchors
-from .bbox_transform import clip_boxes, bbox_overlaps_batch, bbox_transform_batch
+from faster_rcnn.model.utils.config import cfg
+from faster_rcnn.model.rpn.generate_anchors import generate_anchors
+from faster_rcnn.model.rpn.bbox_transform import clip_boxes, bbox_overlaps_batch, bbox_transform_batch
 
 import pdb
 
